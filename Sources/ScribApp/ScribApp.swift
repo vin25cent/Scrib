@@ -1,64 +1,39 @@
 import AppKit
+import ScribInfrastructure
 import SwiftUI
 
 @main
+@MainActor
 struct ScribDesktopApp: App {
+    @StateObject private var model = RecordingViewModel(
+        recorder: AVFoundationAudioRecorder(),
+        fileStore: MacCourseFileStore(),
+        teacherStore: UserDefaultsTeacherAuthorizationStore()
+    )
+
     var body: some Scene {
         WindowGroup("Scrib") {
-            NewCourseView()
-                .frame(minWidth: 920, minHeight: 620)
+            ContentView(model: model)
+                .frame(minWidth: 1_080, minHeight: 700)
         }
 
-        MenuBarExtra("Scrib", systemImage: "waveform") {
-            Text("Scrib est prêt")
+        MenuBarExtra("Scrib", systemImage: model.menuBarSystemImage) {
+            Text(model.menuBarStatus)
+            if model.isRecording {
+                Button("Mettre en pause") { model.pause() }
+                Button("Terminer") { model.stop() }
+            } else if model.isPaused {
+                Button("Reprendre") { model.resume() }
+                Button("Terminer") { model.stop() }
+            }
             Divider()
             Button("Quitter Scrib") {
+                guard !model.isRecording && !model.isPaused else {
+                    model.presentQuitWarning()
+                    return
+                }
                 NSApplication.shared.terminate(nil)
             }
-        }
-    }
-}
-
-private struct NewCourseView: View {
-    @State private var semester = "Semestre 1"
-    @State private var teachingUnit = "UE 2.1 — Biologie fondamentale"
-    @State private var title = ""
-    @State private var teacher = ""
-    @State private var expectedDuration = "2 heures"
-
-    var body: some View {
-        NavigationSplitView {
-            List {
-                Section("Cours") {
-                    Label("Nouveau cours", systemImage: "plus.circle")
-                    Label("Segments", systemImage: "rectangle.split.2x1")
-                    Label("File d’attente", systemImage: "arrow.right")
-                }
-                Section("Application") {
-                    Label("Réglages", systemImage: "gearshape")
-                }
-            }
-            .navigationTitle("Scrib")
-        } detail: {
-            Form {
-                Section("Informations du cours") {
-                    TextField("Semestre", text: $semester)
-                    TextField("Unité d’enseignement", text: $teachingUnit)
-                    TextField("Titre du cours", text: $title)
-                    TextField("Enseignant", text: $teacher)
-                    TextField("Durée prévue", text: $expectedDuration)
-                }
-
-                Section {
-                    Button("Démarrer l’enregistrement") {}
-                        .buttonStyle(.borderedProminent)
-                        .disabled(title.isEmpty || teacher.isEmpty)
-                } footer: {
-                    Text("Le moteur audio sera branché lors du prototype dédié.")
-                }
-            }
-            .formStyle(.grouped)
-            .navigationTitle("Nouveau cours")
         }
     }
 }

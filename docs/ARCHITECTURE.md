@@ -45,8 +45,10 @@ module ne connaît ni SwiftUI, ni AVFoundation, ni le réseau.
 
 Cas d'usage et ports : démarrer/arrêter l'enregistrement, clôturer un cours,
 planifier, reprendre, corriger la transcription, régénérer un document et décider
-du sort de l'audio. `ProcessingCoordinator` sera un `actor` afin qu'une seule
-transition de la file soit active.
+du sort de l'audio. Ils couvrent aussi la confirmation d'autorisation par
+enseignant et la levée manuelle d'une alerte de données patient.
+`ProcessingCoordinator` sera un `actor` afin qu'une seule transition de la file
+soit active.
 
 ### `ScribInfrastructure`
 
@@ -105,6 +107,8 @@ déjà terminée n'est rejouée que si une de ses entrées change.
 ## 5. Modèle de données minimal
 
 - `Course` : identité, semestre, UE, titre, enseignant, date, durée prévue.
+- `Teacher` : identité normalisée, nom et date de confirmation de l'autorisation
+  d'enregistrer.
 - `RecordingSegment` : URL locale, ordre, durée, empreinte, état de récupération.
 - `ProcessingJob` : étape, statut, progression, tentatives et prochaine reprise.
 - `Artifact` : type, URL, empreinte, version source et état iCloud.
@@ -112,6 +116,8 @@ déjà terminée n'est rejouée que si une de ses entrées change.
 - `SupportDocument` : type, URL, empreinte, extraction et éléments illisibles.
 - `UsageRecord` : fournisseur, modèle, jetons, coût estimé et mois.
 - `Incident` : catégorie, code, message, extrait optionnel et résolution.
+- `PrivacyReview` : alertes locales de données potentiellement identifiantes,
+  décision manuelle et date de validation avant tout envoi cloud.
 
 SwiftData stocke les métadonnées et références de fichiers. Les audios et grands
 artefacts ne sont jamais placés dans la base.

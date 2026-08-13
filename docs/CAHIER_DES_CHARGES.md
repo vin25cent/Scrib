@@ -1,6 +1,6 @@
 # Cahier des charges — Scrib
 
-Version de cadrage : 0.1 — 13 août 2026
+Version de cadrage : 0.2 — 14 août 2026
 
 ## 1. Objet
 
@@ -25,7 +25,8 @@ Mac et peut prendre autant de temps que nécessaire.
 - ouverture manuelle de Scrib, sans lancement automatique avec macOS ;
 - distribution initiale sur un seul MacBook ;
 - coût minimal : infrastructure gratuite autant que possible, hors API d'IA ;
-- code potentiellement public, sans donnée personnelle, contenu de cours ni clé ;
+- code public sous licence Apache 2.0, sans donnée personnelle, contenu de cours
+  ni clé ;
 - test comparatif initial des fournisseurs d'IA plafonné à 10 € ;
 - validation de la V1 après une semaine complète de cours réels.
 
@@ -34,27 +35,39 @@ Mac et peut prendre autant de temps que nécessaire.
 1. L'utilisateur ouvre Scrib.
 2. Il renseigne les cinq champs obligatoires : semestre, UE, titre, enseignant et
    durée prévue (1 h, 2 h, 4 h ou journée).
-3. Scrib vérifie le microphone et l'espace libre nécessaire.
-4. L'utilisateur démarre l'enregistrement puis ouvre lui-même son document Word.
-5. Scrib affiche en permanence la durée et le niveau sonore.
-6. Les pauses créent plusieurs segments. L'utilisateur choisit les segments à
-   fusionner ; ils sont ordonnés chronologiquement au sein d'une même UE.
-7. À la fin, le cours entre dans une file d'attente persistante.
-8. Le traitement démarre lorsque le Mac est branché et qu'Internet est disponible.
-9. Scrib transcrit localement, génère le cours et la fiche, puis synchronise les
+3. Au premier cours associé à un enseignant, il confirme disposer de
+   l'autorisation d'enregistrer. Scrib mémorise cette confirmation dans la fiche
+   de l'enseignant.
+4. Scrib vérifie le microphone et l'espace libre nécessaire.
+5. L'utilisateur démarre l'enregistrement puis ouvre lui-même son document Word.
+6. Scrib affiche en permanence la durée et le niveau sonore.
+7. Pause/Reprendre crée des segments techniques séparés, rattachés au même cours
+   et ordonnés chronologiquement. Chaque nouvelle date crée un cours distinct.
+8. À la fin, le cours entre dans une file d'attente persistante.
+9. Le traitement démarre lorsque le Mac est branché et qu'Internet est disponible.
+10. Scrib transcrit localement, génère le cours et la fiche, puis synchronise les
    deux DOCX dans iCloud Drive.
-10. Une notification de fin demande si l'audio local doit être conservé ou
+11. Une notification de fin demande si l'audio local doit être conservé ou
     supprimé. La transcription reste associée au cours.
 
 ## 4. Exigences fonctionnelles
 
 ### 4.1 Préparation et classement
 
-- La liste des UE IFSI est préchargée et modifiable.
+- La liste des UE IFSI est préchargée depuis le
+  [référentiel fourni](REFERENTIEL_UE.md) et reste modifiable. Les doublons du
+  semestre 4 sont conservés volontairement. L'intitulé de l'UE 5.7 optionnelle
+  sera défini ultérieurement.
+- Un cours est distinct pour chaque date, même si l'UE et le titre sont identiques.
+- La liste des enseignants mémorise leur nom et la date de confirmation de
+  l'autorisation d'enregistrer. La confirmation n'est demandée qu'au premier
+  cours associé à cet enseignant ; modifier son identité invalide la confirmation.
 - Le dossier est nommé `Semestre – UE – titre – date` après normalisation des
   caractères interdits.
 - Le document de notes personnelles est le DOCX du dossier qui n'est ni le cours
   final ni la fiche finale.
+- Si plusieurs DOCX correspondent à cette règle, Scrib demande lequel utiliser
+  et ne choisit jamais arbitrairement.
 - S'il est ouvert au moment du traitement, Scrib demande de l'enregistrer et
   attend une confirmation.
 - En l'absence de notes personnelles, le traitement continue automatiquement.
@@ -69,6 +82,8 @@ Mac et peut prendre autant de temps que nécessaire.
 - Si un microphone externe disparaît, Scrib bascule immédiatement sur le micro
   interne, journalise et signale l'incident.
 - Pendant l'enregistrement, Scrib empêche la veille et garde l'écran allumé.
+- Pause/Reprendre finalise le segment courant puis en crée un nouveau, sans créer
+  un nouveau cours.
 - Un point de reprise exploitable est créé au plus toutes les dix minutes afin de
   limiter la perte en cas de fermeture brutale ou d'arrêt du Mac.
 - Une durée dépassée n'interrompt pas l'enregistrement tant que l'espace libre
@@ -108,14 +123,17 @@ Ordre logique de la V1 :
    glossaire appris à partir des corrections ;
 6. intégrer les notes personnelles comme compléments clairement identifiés ;
 7. intégrer sur demande les PDF, PowerPoint, Word, images/scans et tableurs ;
-8. demander au fournisseur cloud une sortie structurée, fidèle et traçable ;
-9. vérifier les références scientifiques selon la politique autorisée ;
-10. rendre localement les deux DOCX de manière déterministe ;
-11. publier les DOCX dans iCloud Drive et nettoyer les temporaires.
+8. détecter localement les données pouvant identifier un patient et bloquer
+   l'envoi tant qu'une vérification manuelle n'a pas levé l'alerte ;
+9. demander au fournisseur cloud une sortie structurée, fidèle et traçable ;
+10. vérifier les références scientifiques selon la politique autorisée ;
+11. rendre localement les deux DOCX de manière déterministe ;
+12. publier les DOCX dans iCloud Drive et nettoyer les temporaires.
 
 L'audio ne quitte jamais le Mac. La transcription complète peut être envoyée au
-fournisseur cloud, conformément au choix exprimé, sous réserve du respect du droit
-d'enregistrer et de l'absence de données identifiantes de patients.
+fournisseur cloud, conformément au choix exprimé, sous réserve de la confirmation
+du droit d'enregistrer et de l'absence vérifiée de données identifiantes de
+patients.
 
 ### 4.5 Transcription
 
@@ -124,7 +142,8 @@ d'enregistrer et de l'absence de données identifiantes de patients.
   leur langue originale.
 - Les termes médicaux, médicaments et sigles sont aidés par trois sources :
   glossaire préchargé modifiable, corrections antérieures et supports du cours.
-- Les passages incertains sont signalés avec un horodatage audio.
+- Les passages incertains et les informations médicales importantes comportent
+  un renvoi vers l'horodatage audio.
 - La transcription peut être corrigée dans Scrib, puis le cours et la fiche sont
   régénérés sans retranscrire l'audio.
 - Le choix final du moteur et du modèle dépend d'un benchmark sur le Mac cible.
@@ -141,6 +160,9 @@ d'enregistrer et de l'absence de données identifiantes de patients.
 - En-tête ou pied de page : semestre, UE, titre, enseignant et date du cours.
 - Encadrés dédiés aux notes personnelles, contradictions/incertitudes et mises à
   jour scientifiques.
+- Chaque encadré de mise à jour scientifique affiche directement l'autorité, le
+  lien canonique et la date de vérification. Une bibliographie finale récapitule
+  ces références.
 - Style équilibré : fond sobre, encadrés colorés et document modifiable.
 
 ### 4.7 Fiche de révision DOCX
@@ -158,6 +180,9 @@ Longueur adaptative. Elle doit inclure selon la matière :
 
 - Une note externe ne remplace jamais le propos original : elle apparaît à sa
   suite, clairement séparée, datée et sourcée.
+- Le contrôle porte au minimum sur toutes les informations cliniques sensibles,
+  notamment les dosages, médicaments, valeurs, seuils, contre-indications,
+  recommandations et conduites de soins.
 - La recherche est limitée à une liste de domaines d'autorités : sources
   françaises et européennes, OMS, NICE et CDC. La liste précise est configurable.
 - Si des autorités fiables divergent, Scrib présente le désaccord et cite les
@@ -213,15 +238,21 @@ pas silencieusement vers un autre fournisseur.
 ## 5. Critères d'acceptation V1
 
 - Trente heures hebdomadaires peuvent entrer dans la file sans perte ni doublon.
+- Le premier cours d'un enseignant ne peut pas démarrer sans confirmation de
+  l'autorisation ; les cours suivants réutilisent cette confirmation.
 - Après arrêt forcé, la perte audio maximale est inférieure ou égale à dix minutes
   et la file reprend au dernier checkpoint valide.
 - Aucun audio n'est envoyé sur le réseau.
+- Une alerte de donnée patient bloque tout envoi cloud jusqu'à validation
+  manuelle.
 - Aucun traitement lourd ne démarre sur batterie et l'enregistrement préempte la
   file en cours.
 - Une correction de transcription permet de régénérer séparément chaque DOCX.
 - Les deux DOCX s'ouvrent et restent modifiables dans Word Microsoft 365.
 - Les passages incertains, contradictions et ajouts scientifiques sont visuellement
   distincts du contenu de l'enseignant.
+- Les passages incertains et informations médicales importantes permettent de
+  retrouver l'horodatage audio correspondant.
 - Une semaine réelle de cours est traitée avec moins de cinq minutes de vérification
   manuelle par cours normal.
 - Les clés, audios, transcriptions et documents ne figurent jamais dans Git.

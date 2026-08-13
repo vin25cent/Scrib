@@ -14,6 +14,7 @@ supports et génération DOCX) ne sont pas encore implémentés.
 - [Architecture technique](docs/ARCHITECTURE.md)
 - [Feuille de route](docs/ROADMAP.md)
 - [Décisions ouvertes](docs/DECISIONS_OUVERTES.md)
+- [Référentiel des UE](docs/REFERENTIEL_UE.md)
 
 ## Structure
 
@@ -67,6 +68,7 @@ chaque envoi sur `main` et pour chaque pull request.
 
 ## Confidentialité du dépôt
 
-Le code pourra devenir public, mais les clés, enregistrements, transcriptions,
+Le code est public, mais les clés, enregistrements, transcriptions,
 documents de cours, modèles téléchargés et journaux locaux ne doivent jamais être
-versionnés. Voir `.gitignore` et la section sécurité du cahier des charges.
+versionnés. Le code est publié sous licence Apache 2.0. Voir `LICENSE`,
+`.gitignore` et la section sécurité du cahier des charges.

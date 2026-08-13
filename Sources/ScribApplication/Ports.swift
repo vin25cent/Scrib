@@ -6,9 +6,27 @@ public protocol CourseRepository: Sendable {
     func course(id: CourseID) async throws -> Course?
 }
 
-public protocol AudioRecording: Sendable {
-    func start(courseID: CourseID) async throws
-    func stop() async throws
+@MainActor
+public protocol AudioRecording: AnyObject {
+    func requestPermission() async -> Bool
+    func start(courseID: CourseID, directory: URL) throws
+    func pause() throws
+    func resume() throws
+    func stop() throws -> [RecordingSegment]
+    func snapshot() -> AudioRecorderSnapshot
+}
+
+@MainActor
+public protocol CourseFileStoring: AnyObject {
+    func recordingDirectory(for course: Course) throws -> URL
+    func availableCapacity(for directory: URL) throws -> Int64
+}
+
+@MainActor
+public protocol TeacherAuthorizationStoring: AnyObject {
+    func teachers() -> [Teacher]
+    func teacher(named name: String) -> Teacher?
+    func save(_ teacher: Teacher) throws
 }
 
 public protocol TranscriptionEngine: Sendable {

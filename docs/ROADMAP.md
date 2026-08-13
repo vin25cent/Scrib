@@ -1,6 +1,6 @@
 # Feuille de route
 
-## Phase 0 — Cadrage et socle (actuelle)
+## Phase 0 — Cadrage et socle (terminée le 14 août 2026)
 
 - consolider le cahier des charges ;
 - définir les frontières de modules et la machine d'états ;
@@ -9,7 +9,7 @@
 
 Sortie : dépôt documenté, ouvrable dans Xcode et prêt pour des prototypes isolés.
 
-## Phase 1 — Prototype fiable d'enregistrement
+## Phase 1 — Prototype fiable d'enregistrement (prochaine)
 
 - formulaire et liste d'UE ;
 - capture AVFoundation, vu-mètre et segments récupérables ;
