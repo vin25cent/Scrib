@@ -1,0 +1,27 @@
+# Xcode / Swift Package Manager
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+Secrets.xcconfig
+*.p8
+*.pem
+
+# Données Scrib strictement locales
+LocalData/
+Models/
+Diagnostics/
+
+# macOS
+.DS_Store
+
+# Éditeurs
+.idea/
+.vscode/
+*.swp

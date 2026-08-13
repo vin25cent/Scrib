@@ -1,0 +1,256 @@
+# Architecture technique — Scrib
+
+## 1. Principes
+
+1. **Natif et autonome** : Swift 6, SwiftUI et AppKit ; aucun Python, Homebrew ou
+   serveur local à installer sur le Mac cible.
+2. **Fiabilité avant débit** : audio segmenté, états persistants et opérations
+   idempotentes.
+3. **Une seule charge lourde** : acteur d'orchestration séquentiel, profil de
+   ressources bas et préemption immédiate par l'enregistrement.
+4. **Local d'abord** : audio, transcription, métadonnées et journaux restent sur
+   le Mac. Seuls les textes nécessaires partent vers le fournisseur choisi.
+5. **Sortie déterministe** : l'IA renvoie des données structurées ; Scrib rend le
+   DOCX localement. Le modèle ne fabrique pas directement le fichier final.
+6. **Choix réversibles** : transcription, IA, recherche, extraction de supports,
+   DOCX et stockage sont derrière des protocoles.
+
+## 2. Vue d'ensemble
+
+```mermaid
+flowchart LR
+    UI["SwiftUI + menu macOS"] --> APP["Cas d'usage"]
+    APP --> DOMAIN["Domaine et machine d'états"]
+    APP --> QUEUE["Coordinateur séquentiel"]
+    QUEUE --> AUDIO["AVFoundation"]
+    QUEUE --> ASR["Transcription locale interchangeable"]
+    QUEUE --> SUPPORTS["Extraction de supports"]
+    QUEUE --> CLOUD["IA cloud + sortie JSON"]
+    CLOUD --> SOURCES["Recherche à domaines autorisés"]
+    QUEUE --> DOCX["Rendu OOXML local"]
+    QUEUE --> FILES["Stockage local + iCloud Drive"]
+    DOMAIN --> STORE["SwiftData local"]
+    QUEUE --> STORE
+```
+
+## 3. Modules
+
+### `ScribDomain`
+
+Types Swift purs et testables : identifiant du cours, métadonnées, segments,
+étapes, statuts, incidents, estimation de coûts et politique de traitement. Ce
+module ne connaît ni SwiftUI, ni AVFoundation, ni le réseau.
+
+### `ScribApplication`
+
+Cas d'usage et ports : démarrer/arrêter l'enregistrement, clôturer un cours,
+planifier, reprendre, corriger la transcription, régénérer un document et décider
+du sort de l'audio. `ProcessingCoordinator` sera un `actor` afin qu'une seule
+transition de la file soit active.
+
+### `ScribInfrastructure`
+
+Adaptateurs concrets, ajoutés progressivement :
+
+- `AVFoundationAudioRecorder` ;
+- `SwiftDataCourseRepository` ;
+- `SystemConditionMonitor` (secteur, réseau, pression mémoire, état thermique) ;
+- `LocalTranscriptionAdapter` ;
+- `CloudGenerationAdapter` ;
+- `AllowlistedResearchAdapter` ;
+- `OfficeSupportExtractor` et `VisionSupportExtractor` ;
+- `OOXMLDocumentRenderer` ;
+- `LocalCourseFileStore` et `ICloudPublisher` ;
+- `KeychainSecretStore` ;
+- `UserNotificationAdapter`.
+
+### `ScribApp`
+
+Fenêtre SwiftUI, formulaire, enregistreur, file, éditeur de transcription,
+réglages et `MenuBarExtra`. AppKit est réservé aux besoins propres à macOS : état
+des fenêtres, sélecteurs de fichiers, coordination de fichiers et intégration
+Word.
+
+## 4. Machine d'états persistante
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft
+    draft --> recording
+    recording --> captured
+    captured --> queued
+    queued --> preparing: secteur + Internet
+    preparing --> transcribing
+    transcribing --> analyzing
+    analyzing --> rendering
+    rendering --> publishing
+    publishing --> completed
+    preparing --> suspended
+    transcribing --> suspended
+    analyzing --> suspended
+    rendering --> suspended
+    publishing --> suspended
+    suspended --> queued: préconditions rétablies
+    transcribing --> needsAttention: erreur non récupérable
+    analyzing --> needsAttention: erreur non récupérable
+    rendering --> needsAttention: conflit Word
+    publishing --> needsAttention: conflit fichier
+    needsAttention --> queued: correction ou relance
+```
+
+Chaque transition écrit : statut, étape, progression, nombre de tentatives,
+entrée(s), sortie(s), date, version du moteur et empreinte du contenu. Une étape
+déjà terminée n'est rejouée que si une de ses entrées change.
+
+## 5. Modèle de données minimal
+
+- `Course` : identité, semestre, UE, titre, enseignant, date, durée prévue.
+- `RecordingSegment` : URL locale, ordre, durée, empreinte, état de récupération.
+- `ProcessingJob` : étape, statut, progression, tentatives et prochaine reprise.
+- `Artifact` : type, URL, empreinte, version source et état iCloud.
+- `TranscriptRevision` : texte horodaté, locuteurs, incertitudes et version.
+- `SupportDocument` : type, URL, empreinte, extraction et éléments illisibles.
+- `UsageRecord` : fournisseur, modèle, jetons, coût estimé et mois.
+- `Incident` : catégorie, code, message, extrait optionnel et résolution.
+
+SwiftData stocke les métadonnées et références de fichiers. Les audios et grands
+artefacts ne sont jamais placés dans la base.
+
+## 6. Stockage
+
+```text
+~/Library/Application Support/Scrib/
+├── Store/                         base locale
+├── Courses/
+│   └── <course-id>/
+│       ├── audio/                 segments et audio fusionné
+│       ├── transcript/            versions horodatées
+│       ├── supports/              copies de travail
+│       ├── output/                DOCX locaux validés
+│       └── temp/                  supprimé après succès
+├── Models/                        modèle de transcription choisi
+└── Diagnostics/                   journaux bornés
+
+iCloud Drive/Scrib/
+└── <Semestre – UE – titre – date>/
+    ├── Cours complet.docx
+    └── Fiche de révision.docx
+```
+
+Les écritures utilisent un fichier temporaire dans le même volume, puis un
+remplacement atomique. La coordination de fichiers protège les interactions avec
+Word et iCloud. La base locale est la source de vérité ; iCloud ne sert qu'à
+publier les deux documents finaux.
+
+## 7. Enregistrement audio
+
+`AVAudioEngine` fournit le flux du périphérique d'entrée. L'adaptateur écrit des
+segments récupérables et mesure le niveau sans traitement coûteux sur le thread
+temps réel. La compression, la fusion et le nettoyage sont différés.
+
+Règles d'implémentation :
+
+- aucun accès disque, log détaillé ou allocation importante dans le callback
+  audio ;
+- segment courant finalisé régulièrement, au maximum toutes les dix minutes ;
+- observation des changements de périphérique et bascule contrôlée ;
+- inhibition de veille limitée à l'enregistrement ;
+- test de réservation d'espace avant départ et surveillance pendant le cours.
+
+## 8. Transcription locale
+
+Le port `TranscriptionEngine` masque le moteur concret. Deux candidats seront
+benchmarkés sur la machine finale : une intégration MLX et une intégration
+Core ML native. Le choix ne doit pas imposer Python sur le Mac cible.
+
+Le benchmark compare Small, Medium quantifié et Large-v3-Turbo quantifié avec :
+
+- fidélité de termes médicaux et horodatages ;
+- pic mémoire et pression mémoire ;
+- impact sur Word et autonomie ;
+- température, stabilité et temps par heure d'audio ;
+- taille de modèle sur disque.
+
+Contraintes fixes : lot de taille 1, traitement séquentiel, libération du modèle
+après l'étape, suspension aux états thermiques sérieux/critiques et possibilité de
+reprendre par blocs.
+
+La diarisation est une étape séparée et optionnelle : une mauvaise attribution de
+locuteur ne doit jamais modifier les mots reconnus.
+
+## 9. Génération cloud et contrôle des sources
+
+Le fournisseur reçoit une requête versionnée et renvoie un schéma JSON comprenant
+sections, paragraphes, tableaux, encadrés, références, incertitudes et liens vers
+les horodatages. Le JSON est validé avant toute génération Word.
+
+La recherche scientifique ne donne jamais un navigateur ouvert au modèle. Un
+service local :
+
+1. valide le domaine demandé contre une liste blanche ;
+2. récupère la page via HTTPS ;
+3. conserve URL canonique, titre, autorité et date d'accès ;
+4. rejette les redirections hors liste ;
+5. transmet seulement les extraits utiles au modèle ;
+6. revalide chaque citation présente dans la réponse structurée.
+
+Les appels réseau sont rejouables avec une clé d'idempotence. Les délais utilisent
+une reprise exponentielle avec dispersion, mais aucun fournisseur secondaire
+n'est sélectionné sans action explicite.
+
+## 10. Rendu DOCX
+
+`OOXMLDocumentRenderer` reçoit un modèle interne validé et construit localement un
+package Office Open XML. Cette approche évite de confier la mise en page finale au
+modèle et n'exige pas que Word soit piloté pendant le traitement.
+
+Le renderer devra prendre en charge : styles, titres, champs de sommaire, en-têtes
+et pieds de page, pagination, tableaux, images, hyperliens, encadrés et métadonnées.
+Word pourra actualiser le champ de sommaire à l'ouverture si nécessaire.
+
+Une bibliothèque ZIP Swift légère pourra être ajoutée après prototype. Elle devra
+être épinglée, auditée et intégrée à l'application ; aucune dépendance globale ne
+sera installée sur le Mac.
+
+## 11. Ressources et exécution macOS
+
+- `ProcessInfo.thermalState` et ses notifications pilotent la suspension thermique.
+- La pression mémoire déclenche la libération des caches et la suspension de
+  l'étape lourde au prochain checkpoint sûr.
+- Une activité système est ouverte uniquement pendant l'enregistrement et, si
+  nécessaire, pendant la transcription locale.
+- La présence du secteur est une précondition du coordinateur.
+- L'absence de fenêtre n'arrête pas le processus ; quitter explicitement
+  l'application demande confirmation si une opération est active.
+- La file demeure volontairement séquentielle sur 8 Go.
+
+## 12. Sécurité
+
+- clés API dans le Trousseau ;
+- App Sandbox et droits minimums : microphone, notifications, fichiers choisis et
+  conteneur iCloud ;
+- transport TLS, domaines explicitement autorisés ;
+- aucun secret dans les réglages exportables ni les journaux ;
+- journaux structurés, rotation et purge ;
+- extraits de cours désactivés par défaut sauf incident nécessitant un diagnostic ;
+- manifeste de confidentialité et vérification des SDK tiers avant distribution.
+
+## 13. Build, distribution et mise à jour
+
+Le développement et la signature peuvent se faire hors du Mac cible. La première
+distribution vise une archive d'application autonome. Sans abonnement Apple
+Developer, macOS demandera une autorisation manuelle à la première ouverture ; la
+notarisation pourra être ajoutée ultérieurement.
+
+Les mises à jour sont prévues via un petit programme « Mise à jour Scrib » lancé
+manuellement. Ce composant vérifiera une version publiée, téléchargera, vérifiera
+une empreinte/signature, puis remplacera Scrib quand l'application est fermée. Il
+n'est pas implémenté dans le socle actuel.
+
+## 14. Références techniques
+
+- [AVAudioEngine — Apple](https://developer.apple.com/documentation/avfaudio/avaudioengine)
+- [ModelContainer / SwiftData — Apple](https://developer.apple.com/documentation/swiftdata/modelcontainer)
+- [ProcessInfo — Apple](https://developer.apple.com/documentation/foundation/processinfo)
+- [MLX Swift — Apple ML Research](https://github.com/ml-explore/mlx-swift)
+- [Exemple Whisper MLX](https://github.com/ml-explore/mlx-examples/tree/main/whisper)

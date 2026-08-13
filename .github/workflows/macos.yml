@@ -1,0 +1,30 @@
+name: macOS CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test on Apple Silicon
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+
+      - name: Show the Swift toolchain
+        run: swift --version
+
+      - name: Build the macOS application target
+        run: swift build --product ScribApp
+
+      - name: Run all tests
+        run: swift test
