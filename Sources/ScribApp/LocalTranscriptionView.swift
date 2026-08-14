@@ -13,13 +13,13 @@ struct LocalTranscriptionView: View {
                     subtitle: "WhisperKit est intégré pour le benchmark alpha. Il ne constitue pas encore le choix définitif de Scrib.",
                     icon: "waveform.badge.magnifyingglass"
                 )
-                engineCard
-                modelCard
-                transcriptionCard
+                LocalTranscriptionEngineCard()
+                LocalTranscriptionModelCard(model: model)
+                LocalTranscriptionAudioCard(model: model)
                 if let result = model.lastLocalTranscriptionResult {
-                    resultCard(result)
+                    LocalTranscriptionResultCard(model: model, result: result)
                 }
-                privacyNote
+                LocalTranscriptionPrivacyNote()
             }
             .padding(.horizontal, 32)
             .padding(.bottom, 34)
@@ -30,8 +30,10 @@ struct LocalTranscriptionView: View {
         .overlay(alignment: .bottomTrailing) { WorkspaceNotice(model: model) }
         .task { await model.refreshLocalModelStatus() }
     }
+}
 
-    private var engineCard: some View {
+private struct LocalTranscriptionEngineCard: View {
+    var body: some View {
         HStack(spacing: 16) {
             Image(systemName: "cpu.fill")
                 .font(.title2)
@@ -55,55 +57,60 @@ struct LocalTranscriptionView: View {
         }
         .scribCard()
     }
+}
 
-    private var modelCard: some View {
+private struct LocalTranscriptionModelCard: View {
+    @ObservedObject var model: RecordingViewModel
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             ScribSectionHeading(
                 "Modèle local",
                 subtitle: "Le téléchargement ne commence que lorsque vous le demandez.",
                 icon: "square.and.arrow.down"
             )
-            Picker(
-                "Modèle",
-                selection: Binding(
-                    get: { model.selectedLocalTranscriptionModel },
-                    set: model.selectLocalTranscriptionModel
-                )
-            ) {
-                ForEach(model.localTranscriptionModels) { descriptor in
-                    Text(descriptor.displayName).tag(descriptor.id)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(model.isDownloadingTranscriptionModel || model.isLocalTranscriptionRunning)
-
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: modelStatusIcon)
-                    .foregroundStyle(modelStatusColor)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(modelStatusTitle).font(.headline)
-                    Text(model.selectedLocalTranscriptionModelDescriptor.intendedUse)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(modelSizeText)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                    if let error = model.localModelStatus.errorMessage {
-                        Text(error).font(.caption).foregroundStyle(.red)
-                    }
-                }
-                Spacer()
-                modelAction
-            }
-
-            if model.isDownloadingTranscriptionModel {
-                ProgressView(value: model.localModelStatus.progress ?? 0)
-                Text(downloadProgressText)
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
+            modelPicker
+            modelStatus
+            downloadProgress
         }
         .scribCard()
+    }
+
+    private var modelPicker: some View {
+        Picker(
+            "Modèle",
+            selection: Binding(
+                get: { model.selectedLocalTranscriptionModel },
+                set: { model.selectLocalTranscriptionModel($0) }
+            )
+        ) {
+            ForEach(model.localTranscriptionModels) { descriptor in
+                Text(descriptor.displayName).tag(descriptor.id)
+            }
+        }
+        .pickerStyle(.segmented)
+        .disabled(model.isDownloadingTranscriptionModel || model.isLocalTranscriptionRunning)
+    }
+
+    private var modelStatus: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: statusIcon)
+                .foregroundStyle(statusColor)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(statusTitle).font(.headline)
+                Text(model.selectedLocalTranscriptionModelDescriptor.intendedUse)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(sizeText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                if let error = model.localModelStatus.errorMessage {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
+            }
+            Spacer()
+            modelAction
+        }
     }
 
     @ViewBuilder
@@ -121,60 +128,151 @@ struct LocalTranscriptionView: View {
         }
     }
 
-    private var transcriptionCard: some View {
+    @ViewBuilder
+    private var downloadProgress: some View {
+        if model.isDownloadingTranscriptionModel {
+            ProgressView(value: model.localModelStatus.progress ?? 0)
+            Text(progressText)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var statusTitle: String {
+        switch model.localModelStatus.availability {
+        case .notDownloaded: "Non téléchargé"
+        case .downloading: "Téléchargement en cours"
+        case .available: "Modèle disponible hors ligne"
+        case .failed: "Erreur de modèle"
+        }
+    }
+
+    private var statusIcon: String {
+        switch model.localModelStatus.availability {
+        case .notDownloaded: "icloud.and.arrow.down"
+        case .downloading: "arrow.down.circle"
+        case .available: "checkmark.circle.fill"
+        case .failed: "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        switch model.localModelStatus.availability {
+        case .available: ScribDesign.success
+        case .failed: .red
+        default: ScribDesign.accent
+        }
+    }
+
+    private var sizeText: String {
+        if let installed = model.localModelStatus.installedSizeBytes {
+            return "Taille installée : \(model.formatBytes(installed))"
+        }
+        if let estimated = model.selectedLocalTranscriptionModelDescriptor.estimatedDownloadBytes {
+            return "Téléchargement estimé : \(model.formatBytes(estimated))"
+        }
+        return "La taille exacte sera affichée après téléchargement."
+    }
+
+    private var progressText: String {
+        let percent = Int((model.localModelStatus.progress ?? 0) * 100)
+        return "\(percent) % — une connexion Internet est requise uniquement pour cette étape."
+    }
+}
+
+private struct LocalTranscriptionAudioCard: View {
+    @ObservedObject var model: RecordingViewModel
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             ScribSectionHeading(
                 "Audio du cours",
                 subtitle: "Les segments sont traités dans leur ordre, un par un, en français.",
                 icon: "waveform"
             )
-            HStack(spacing: 24) {
-                metric("Segments", value: "\(model.capturedSegments.count)")
-                metric("Durée audio", value: model.formatTimestamp(model.localAudioDuration))
-                metric("État", value: transcriptionStateTitle)
-                Spacer()
-            }
-
-            if model.isLocalTranscriptionRunning || model.localTranscriptionProgress.stage == .cancelled {
-                ProgressView(value: model.localTranscriptionProgress.fractionCompleted ?? 0)
-                HStack {
-                    Text(model.localTranscriptionProgress.message ?? transcriptionStateTitle)
-                    Spacer()
-                    Text(model.formatTimestamp(model.localTranscriptionProgress.elapsedSeconds))
-                        .monospacedDigit()
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                if model.isLocalTranscriptionRunning {
-                    Button("Annuler la transcription", role: .destructive) {
-                        model.cancelLocalTranscription()
-                    }
-                    .buttonStyle(.bordered)
-                } else {
-                    Button("Transcrire localement") { model.startLocalTranscription() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .disabled(!model.canStartLocalTranscription)
-                }
-                Spacer()
-                if model.capturedSegments.isEmpty {
-                    Text("Enregistrez puis arrêtez un cours pour activer la transcription.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if model.localModelStatus.availability != .available {
-                    Text("Téléchargez d’abord le modèle sélectionné.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            metrics
+            progress
+            actions
         }
         .scribCard()
     }
 
-    private func resultCard(_ result: LocalTranscriptionResult) -> some View {
+    private var metrics: some View {
+        HStack(spacing: 24) {
+            LocalTranscriptionMetric(title: "Segments", value: "\(model.capturedSegments.count)")
+            LocalTranscriptionMetric(title: "Durée audio", value: model.formatTimestamp(model.localAudioDuration))
+            LocalTranscriptionMetric(title: "État", value: stateTitle)
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var progress: some View {
+        if model.isLocalTranscriptionRunning || model.localTranscriptionProgress.stage == .cancelled {
+            ProgressView(value: model.localTranscriptionProgress.fractionCompleted ?? 0)
+            HStack {
+                Text(model.localTranscriptionProgress.message ?? stateTitle)
+                Spacer()
+                Text(model.formatTimestamp(model.localTranscriptionProgress.elapsedSeconds))
+                    .monospacedDigit()
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private var actions: some View {
+        HStack {
+            if model.isLocalTranscriptionRunning {
+                Button("Annuler la transcription", role: .destructive) {
+                    model.cancelLocalTranscription()
+                }
+                .buttonStyle(.bordered)
+            } else {
+                Button("Transcrire localement") { model.startLocalTranscription() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(!model.canStartLocalTranscription)
+            }
+            Spacer()
+            availabilityHint
+        }
+    }
+
+    @ViewBuilder
+    private var availabilityHint: some View {
+        if model.capturedSegments.isEmpty {
+            Text("Enregistrez puis arrêtez un cours pour activer la transcription.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else if model.localModelStatus.availability != .available {
+            Text("Téléchargez d’abord le modèle sélectionné.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var stateTitle: String {
+        switch model.localTranscriptionProgress.stage {
+        case .idle: "Prêt"
+        case .checkingModel: "Vérification"
+        case .loadingModel: "Chargement"
+        case .convertingAudio: "Préparation audio"
+        case .transcribing: "Transcription"
+        case .assembling: "Assemblage"
+        case .saving: "Enregistrement"
+        case .completed: "Terminé"
+        case .cancelled: "Annulé"
+        case .failed: "Erreur"
+        }
+    }
+}
+
+private struct LocalTranscriptionResultCard: View {
+    @ObservedObject var model: RecordingViewModel
+    let result: LocalTranscriptionResult
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ScribSectionHeading(
                 "Dernier résultat brut",
@@ -182,10 +280,13 @@ struct LocalTranscriptionView: View {
                 icon: "checkmark.seal.fill"
             )
             HStack(spacing: 24) {
-                metric("Modèle", value: result.modelID.rawValue)
-                metric("Traitement", value: model.formatTimestamp(result.metrics.processingDurationSeconds))
-                metric("Facteur temps réel", value: realtimeFactorText(result.metrics.realtimeFactor))
-                metric("Passages", value: "\(result.passages.count)")
+                LocalTranscriptionMetric(title: "Modèle", value: result.modelID.rawValue)
+                LocalTranscriptionMetric(
+                    title: "Traitement",
+                    value: model.formatTimestamp(result.metrics.processingDurationSeconds)
+                )
+                LocalTranscriptionMetric(title: "Facteur temps réel", value: realtimeFactorText)
+                LocalTranscriptionMetric(title: "Passages", value: "\(result.passages.count)")
                 Spacer()
             }
             if !result.plainText.isEmpty {
@@ -204,7 +305,14 @@ struct LocalTranscriptionView: View {
         .scribCard()
     }
 
-    private var privacyNote: some View {
+    private var realtimeFactorText: String {
+        guard let value = result.metrics.realtimeFactor else { return "Non mesuré" }
+        return String(format: "%.2f×", value)
+    }
+}
+
+private struct LocalTranscriptionPrivacyNote: View {
+    var body: some View {
         Label(
             "Cette étape ne déclenche aucun appel IA cloud. La diarisation et la correction LLM sont volontairement absentes.",
             systemImage: "lock.shield.fill"
@@ -213,72 +321,20 @@ struct LocalTranscriptionView: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 4)
     }
+}
 
-    private func metric(_ title: String, value: String) -> some View {
+private struct LocalTranscriptionMetric: View {
+    let title: String
+    let value: String
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-            Text(value).font(.subheadline.weight(.semibold)).monospacedDigit()
+            Text(title.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
         }
-    }
-
-    private var modelStatusTitle: String {
-        switch model.localModelStatus.availability {
-        case .notDownloaded: "Non téléchargé"
-        case .downloading: "Téléchargement en cours"
-        case .available: "Modèle disponible hors ligne"
-        case .failed: "Erreur de modèle"
-        }
-    }
-
-    private var modelStatusIcon: String {
-        switch model.localModelStatus.availability {
-        case .notDownloaded: "icloud.and.arrow.down"
-        case .downloading: "arrow.down.circle"
-        case .available: "checkmark.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        }
-    }
-
-    private var modelStatusColor: Color {
-        switch model.localModelStatus.availability {
-        case .available: ScribDesign.success
-        case .failed: .red
-        default: ScribDesign.accent
-        }
-    }
-
-    private var modelSizeText: String {
-        if let installed = model.localModelStatus.installedSizeBytes {
-            return "Taille installée : \(model.formatBytes(installed))"
-        }
-        if let estimated = model.selectedLocalTranscriptionModelDescriptor.estimatedDownloadBytes {
-            return "Téléchargement estimé : \(model.formatBytes(estimated))"
-        }
-        return "La taille exacte sera affichée après téléchargement."
-    }
-
-    private var downloadProgressText: String {
-        let percent = Int((model.localModelStatus.progress ?? 0) * 100)
-        return "\(percent) % — une connexion Internet est requise uniquement pour cette étape."
-    }
-
-    private var transcriptionStateTitle: String {
-        switch model.localTranscriptionProgress.stage {
-        case .idle: "Prêt"
-        case .checkingModel: "Vérification"
-        case .loadingModel: "Chargement"
-        case .convertingAudio: "Préparation audio"
-        case .transcribing: "Transcription"
-        case .assembling: "Assemblage"
-        case .saving: "Enregistrement"
-        case .completed: "Terminé"
-        case .cancelled: "Annulé"
-        case .failed: "Erreur"
-        }
-    }
-
-    private func realtimeFactorText(_ value: Double?) -> String {
-        guard let value else { return "Non mesuré" }
-        return String(format: "%.2f×", value)
     }
 }
