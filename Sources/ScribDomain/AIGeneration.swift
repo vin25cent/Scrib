@@ -157,6 +157,17 @@ public struct AIGenerationRun: Identifiable, Equatable, Codable, Sendable {
         self.durationMilliseconds = max(durationMilliseconds, 0)
     }
 
-    public var sectionCount: Int { documents.flatMap(\.sections).count }
-    public var blockCount: Int { documents.flatMap(\.sections).flatMap(\.blocks).count }
+    public var sectionCount: Int {
+        documents.reduce(into: 0) { total, document in
+            total += document.sections.count
+        }
+    }
+
+    public var blockCount: Int {
+        documents.reduce(into: 0) { total, document in
+            total += document.sections.reduce(into: 0) { sectionTotal, section in
+                sectionTotal += section.blocks.count
+            }
+        }
+    }
 }
