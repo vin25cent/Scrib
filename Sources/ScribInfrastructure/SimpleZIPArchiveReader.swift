@@ -126,10 +126,12 @@ struct SimpleZIPArchiveReader {
     private static func inflate(_ source: Data, expectedSize: Int) throws -> Data {
         if expectedSize == 0 { return Data() }
         var output = Data(count: expectedSize + 1)
+        let placeholder = UnsafeMutablePointer<UInt8>.allocate(capacity: 1)
+        defer { placeholder.deallocate() }
         var stream = compression_stream(
-            dst_ptr: nil,
+            dst_ptr: placeholder,
             dst_size: 0,
-            src_ptr: nil,
+            src_ptr: UnsafePointer(placeholder),
             src_size: 0,
             state: nil
         )
