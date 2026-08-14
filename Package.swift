@@ -22,7 +22,7 @@ var targets: [Target] = [
         ],
         linkerSettings: [
             .linkedFramework("AVFoundation", .when(platforms: [.macOS])),
-            .linkedFramework("Compression", .when(platforms: [.macOS])),
+            .linkedLibrary("compression", .when(platforms: [.macOS])),
             .linkedFramework("IOKit", .when(platforms: [.macOS])),
             .linkedFramework("Network", .when(platforms: [.macOS])),
             .linkedFramework("PDFKit", .when(platforms: [.macOS])),
