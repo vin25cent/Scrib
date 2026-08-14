@@ -78,6 +78,13 @@ autorisation manuelle et elle n'est ni notarée ni prête à distribuer au publi
   anti-doublon ;
 - tableau de bord de suivi avec filtres, compteurs, détail d’un cours, progression
   et chronologie des checkpoints ;
+- éditeur local de transcription avec recherche, corrections, marqueurs et
+  renvois vers les horodatages audio ;
+- import persistant des supports enseignant Word, PDF, présentation, tableur et
+  image, avec rejet des documents déjà générés par Scrib ;
+- écran de confidentialité avec aperçus masqués et approbation manuelle liée à
+  l’empreinte exacte de la transcription ;
+- mode démonstration hors ligne, sans audio réel ni appel réseau ;
 - surveillance secteur, réseau, température et pression mémoire, avec préemption
   immédiate par un nouvel enregistrement ;
 - métriques de benchmark de transcription et corpus S1 préparés pour les UE 2.1,

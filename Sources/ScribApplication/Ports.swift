@@ -29,6 +29,13 @@ public protocol TeacherAuthorizationStoring: AnyObject {
     func save(_ teacher: Teacher) throws
 }
 
+@MainActor
+public protocol SupportDocumentImporting: AnyObject {
+    func documents() -> [SupportDocument]
+    func importDocument(from sourceURL: URL) throws -> SupportDocument
+    func deleteDocument(id: UUID) throws
+}
+
 public protocol TranscriptionEngine: Sendable {
     func transcribe(courseID: CourseID) async throws -> String
 }

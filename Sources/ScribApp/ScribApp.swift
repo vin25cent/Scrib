@@ -17,6 +17,7 @@ struct ScribDesktopApp: App {
                 fileStore: MacCourseFileStore(),
                 teacherStore: UserDefaultsTeacherAuthorizationStore(),
                 queueCoordinator: environment.queueCoordinator,
+                supportImporter: environment.supportImporter,
                 startupWarning: environment.persistenceWarning
             )
         )

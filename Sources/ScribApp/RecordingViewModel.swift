@@ -3,6 +3,8 @@ import Combine
 import Foundation
 import ScribApplication
 import ScribDomain
+import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class RecordingViewModel: ObservableObject {
@@ -10,6 +12,10 @@ final class RecordingViewModel: ObservableObject {
         case newCourse = "Nouveau cours"
         case segments = "Segments"
         case queue = "Suivi des cours"
+        case transcript = "Transcription"
+        case supports = "Documents enseignant"
+        case privacy = "Confidentialité"
+        case demonstration = "Démonstration"
         case settings = "Réglages"
 
         var id: String { rawValue }
@@ -19,6 +25,10 @@ final class RecordingViewModel: ObservableObject {
             case .newCourse: "plus.circle"
             case .segments: "rectangle.split.2x1"
             case .queue: "clock.arrow.circlepath"
+            case .transcript: "text.alignleft"
+            case .supports: "doc.badge.plus"
+            case .privacy: "hand.raised.fill"
+            case .demonstration: "sparkles.rectangle.stack"
             case .settings: "gearshape"
             }
         }
@@ -47,6 +57,13 @@ final class RecordingViewModel: ObservableObject {
         didSet { selectFirstVisibleJobIfNeeded() }
     }
     @Published var selectedProcessingJobID: ProcessingJobID?
+    @Published var transcriptDraft: TranscriptDraft?
+    @Published var transcriptSearch = ""
+    @Published var transcriptFilter: TranscriptPassageFilter = .all
+    @Published private(set) var supportDocuments: [SupportDocument] = []
+    @Published private(set) var privacyReview: PrivacyReview?
+    @Published private(set) var isDemoMode = false
+    @Published var workspaceNotice: String?
     @Published private(set) var systemConditions = SystemConditionSnapshot(
         isOnExternalPower: false,
         isNetworkAvailable: false,
@@ -60,8 +77,13 @@ final class RecordingViewModel: ObservableObject {
     private let fileStore: any CourseFileStoring
     private let teacherStore: any TeacherAuthorizationStoring
     private let queueCoordinator: ProcessingQueueCoordinator
+    private let supportImporter: any SupportDocumentImporting
     private let readinessValidator = RecordingReadinessValidator()
     private let trackingPresenter = CourseTrackingPresenter()
+    private let transcriptService = TranscriptWorkspaceService()
+    private let privacyDetector = PatientIdentifierDetector()
+    private let privacyGate = CloudPrivacyGate()
+    private let demonstrationFactory = DemonstrationWorkspaceFactory()
     private var pendingTeacher: Teacher?
     private var pollingTask: Task<Void, Never>?
     private var queuePollingTask: Task<Void, Never>?
@@ -73,13 +95,16 @@ final class RecordingViewModel: ObservableObject {
         fileStore: any CourseFileStoring,
         teacherStore: any TeacherAuthorizationStoring,
         queueCoordinator: ProcessingQueueCoordinator,
+        supportImporter: any SupportDocumentImporting,
         startupWarning: String? = nil
     ) {
         self.recorder = recorder
         self.fileStore = fileStore
         self.teacherStore = teacherStore
         self.queueCoordinator = queueCoordinator
+        self.supportImporter = supportImporter
         self.savedTeachers = teacherStore.teachers()
+        self.supportDocuments = supportImporter.documents()
         self.errorMessage = startupWarning
     }
 
@@ -114,8 +139,182 @@ final class RecordingViewModel: ObservableObject {
         return processingJobs.first { $0.id == selectedProcessingJobID }
     }
 
+    var filteredTranscriptPassages: [TranscriptPassage] {
+        guard let transcriptDraft else { return [] }
+        return transcriptService.passages(
+            in: transcriptDraft,
+            matching: transcriptSearch,
+            filter: transcriptFilter
+        )
+    }
+
+    var privacyFindings: [PrivacyFinding] {
+        guard let transcriptDraft else { return [] }
+        return privacyDetector.scan(transcriptDraft.plainText)
+    }
+
+    var transcriptFingerprint: String? {
+        transcriptDraft.map(transcriptService.contentFingerprint(for:))
+    }
+
+    var cloudTransmissionDecision: CloudTransmissionDecision? {
+        guard let transcriptDraft, let transcriptFingerprint else { return nil }
+        return privacyGate.evaluate(
+            text: transcriptDraft.plainText,
+            contentFingerprint: transcriptFingerprint,
+            review: privacyReview
+        )
+    }
+
+    var isPrivacyApproved: Bool {
+        switch cloudTransmissionDecision {
+        case .allowedNoIdentifiers, .allowedAfterManualReview: true
+        default: false
+        }
+    }
+
     func trackingTimeline(for job: ProcessingJob) -> [CourseTrackingStageItem] {
         trackingPresenter.timeline(for: job)
+    }
+
+    func transcriptTextBinding(for passageID: UUID) -> Binding<String> {
+        Binding(
+            get: { [weak self] in
+                self?.transcriptDraft?.passages.first(where: { $0.id == passageID })?.text ?? ""
+            },
+            set: { [weak self] newValue in
+                self?.updateTranscriptPassage(id: passageID, text: newValue)
+            }
+        )
+    }
+
+    func updateTranscriptPassage(id: UUID, text: String) {
+        guard let transcriptDraft else { return }
+        self.transcriptDraft = transcriptService.updating(
+            transcriptDraft,
+            passageID: id,
+            text: text
+        )
+        privacyReview = nil
+    }
+
+    func toggleTranscriptFlag(_ flag: TranscriptPassageFlag, passageID: UUID) {
+        guard let transcriptDraft else { return }
+        self.transcriptDraft = transcriptService.toggling(
+            flag,
+            in: transcriptDraft,
+            passageID: passageID
+        )
+        privacyReview = nil
+    }
+
+    func saveTranscript() {
+        guard var transcriptDraft else { return }
+        transcriptDraft.updatedAt = Date()
+        self.transcriptDraft = transcriptDraft
+        workspaceNotice = transcriptDraft.isDemonstration
+            ? "Modification conservée pour cette session de démonstration."
+            : "Transcription enregistrée localement."
+    }
+
+    func requestDocumentRegeneration() {
+        workspaceNotice = "La correction est prête. La régénération sera ajoutée à la file sans retranscrire l’audio."
+    }
+
+    func jumpToAudio(at seconds: TimeInterval) {
+        workspaceNotice = isDemoMode
+            ? "Aperçu audio simulé à \(formatTimestamp(seconds)). Aucun fichier audio n’est utilisé."
+            : "Position audio sélectionnée : \(formatTimestamp(seconds))."
+    }
+
+    func approvePrivacyReview() {
+        guard let transcriptFingerprint, !privacyFindings.isEmpty else { return }
+        privacyReview = PrivacyReview(
+            contentFingerprint: transcriptFingerprint,
+            decision: .approved
+        )
+        workspaceNotice = "Vérification enregistrée pour cette version exacte de la transcription."
+    }
+
+    func rejectPrivacyReview() {
+        guard let transcriptFingerprint else { return }
+        privacyReview = PrivacyReview(
+            contentFingerprint: transcriptFingerprint,
+            decision: .rejected
+        )
+        selectedSection = .transcript
+    }
+
+    func importTeacherDocument() {
+        let panel = NSOpenPanel()
+        panel.title = "Importer un document fourni par l’enseignant"
+        panel.message = "Le fichier sera copié dans le stockage local de Scrib."
+        panel.prompt = "Importer"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [
+            "doc", "docx", "pdf", "ppt", "pptx", "xls", "xlsx",
+            "png", "jpg", "jpeg", "heic", "tiff"
+        ].compactMap { UTType(filenameExtension: $0) }
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let document = try supportImporter.importDocument(from: url)
+            supportDocuments = supportImporter.documents()
+                + supportDocuments.filter(\.isDemonstration)
+            workspaceNotice = "\(document.originalFileName) a été copié dans Scrib."
+        } catch {
+            errorMessage = "Le document n’a pas pu être importé : \(error.localizedDescription)"
+        }
+    }
+
+    func deleteSupportDocument(_ document: SupportDocument) {
+        do {
+            if !document.isDemonstration {
+                try supportImporter.deleteDocument(id: document.id)
+            }
+            supportDocuments.removeAll { $0.id == document.id }
+        } catch {
+            errorMessage = "Le document n’a pas pu être supprimé : \(error.localizedDescription)"
+        }
+    }
+
+    func openSupportDocument(_ document: SupportDocument) {
+        guard let localURL = document.localURL else {
+            workspaceNotice = "Le document fictif n’ouvre aucun fichier réel."
+            return
+        }
+        NSWorkspace.shared.open(localURL)
+    }
+
+    func activateDemonstrationMode() {
+        isDemoMode = true
+        transcriptDraft = demonstrationFactory.transcript()
+        privacyReview = nil
+        if !supportDocuments.contains(where: \.isDemonstration) {
+            supportDocuments.insert(demonstrationFactory.supportDocument(), at: 0)
+        }
+        transcriptSearch = ""
+        transcriptFilter = .all
+        workspaceNotice = "Démonstration locale chargée : aucune donnée réelle et aucun appel réseau."
+        selectedSection = .transcript
+    }
+
+    func deactivateDemonstrationMode() {
+        isDemoMode = false
+        if transcriptDraft?.isDemonstration == true {
+            transcriptDraft = nil
+        }
+        supportDocuments.removeAll(where: \.isDemonstration)
+        privacyReview = nil
+        workspaceNotice = "Données de démonstration retirées."
+        selectedSection = .demonstration
+    }
+
+    func formatTimestamp(_ seconds: TimeInterval) -> String {
+        let total = max(Int(seconds), 0)
+        return String(format: "%02d:%02d", total / 60, total % 60)
     }
 
     var menuBarSystemImage: String {

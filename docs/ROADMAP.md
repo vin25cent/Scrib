@@ -52,6 +52,11 @@ Jalon : décision documentée du moteur compatible avec 8 Go.
 horodatages et facteur temps réel implémentés. Les références humaines et les
 mesures RAM/thermique restent à exécuter sur le MacBook cible.
 
+L’interface préparatoire est disponible : éditeur de transcription, recherche,
+corrections, renvois audio, passages incertains et informations médicales
+importantes. Un mode démonstration local permet de tester ces parcours sans média
+réel. Le raccordement au moteur retenu reste conditionné au benchmark.
+
 ## Phase 4 — Génération structurée et DOCX
 
 - comparer des fournisseurs dans la limite totale de 10 € ;
@@ -76,6 +81,11 @@ cloud, la table des matières, les images et la validation Word sur macOS resten
 - citations vérifiées, divergences d'autorités et notes datées.
 
 Jalon : aucune citation finale hors domaine autorisé dans les tests adversariaux.
+
+État : les supports peuvent être sélectionnés, validés, copiés dans le stockage
+local de Scrib, rouverts et supprimés. L’extraction de leur contenu reste à
+brancher. L’écran de revue de confidentialité applique déjà la détection locale,
+le masquage et l’approbation liée à la version exacte du texte.
 
 ## Phase 6 — iCloud, empaquetage et recette
 

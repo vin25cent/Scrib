@@ -4,17 +4,25 @@ import ScribInfrastructure
 @MainActor
 struct AppEnvironment {
     let queueCoordinator: ProcessingQueueCoordinator
+    let supportImporter: any SupportDocumentImporting
     let persistenceWarning: String?
 
     static func live() -> AppEnvironment {
         let repository: any ProcessingJobRepository
-        let warning: String?
+        var warnings: [String] = []
         do {
             repository = try SwiftDataProcessingJobRepository()
-            warning = nil
         } catch {
             repository = InMemoryProcessingJobRepository()
-            warning = "La base persistante n’a pas pu être ouverte. La file sera temporaire : \(error.localizedDescription)"
+            warnings.append("La base persistante n’a pas pu être ouverte. La file sera temporaire : \(error.localizedDescription)")
+        }
+
+        let supportImporter: any SupportDocumentImporting
+        do {
+            supportImporter = try LocalSupportDocumentStore()
+        } catch {
+            supportImporter = InMemorySupportDocumentStore()
+            warnings.append("Les supports importés ne seront pas conservés après fermeture : \(error.localizedDescription)")
         }
 
         let monitor = MacSystemConditionMonitor()
@@ -28,7 +36,8 @@ struct AppEnvironment {
 
         return AppEnvironment(
             queueCoordinator: coordinator,
-            persistenceWarning: warning
+            supportImporter: supportImporter,
+            persistenceWarning: warnings.isEmpty ? nil : warnings.joined(separator: "\n")
         )
     }
 }

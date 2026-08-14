@@ -15,7 +15,13 @@ struct ContentView: View {
                         navigationRow(.segments)
                         navigationRow(.queue)
                     }
+                    Section("CONTENU") {
+                        navigationRow(.transcript)
+                        navigationRow(.supports)
+                        navigationRow(.privacy)
+                    }
                     Section("APPLICATION") {
+                        navigationRow(.demonstration)
                         navigationRow(.settings)
                     }
                 }
@@ -27,15 +33,28 @@ struct ContentView: View {
             .background(ScribDesign.sidebar)
             .navigationSplitViewColumnWidth(min: 230, ideal: 260, max: 300)
         } detail: {
-            switch model.selectedSection ?? .newCourse {
-            case .newCourse:
-                NewCourseView(model: model)
-            case .segments:
-                SegmentsView(model: model)
-            case .queue:
-                ProcessingQueueView(model: model)
-            case .settings:
-                TeacherSettingsView(model: model)
+            VStack(spacing: 0) {
+                if model.isDemoMode {
+                    DemonstrationBanner(model: model)
+                }
+                switch model.selectedSection ?? .newCourse {
+                case .newCourse:
+                    NewCourseView(model: model)
+                case .segments:
+                    SegmentsView(model: model)
+                case .queue:
+                    ProcessingQueueView(model: model)
+                case .transcript:
+                    TranscriptEditorView(model: model)
+                case .supports:
+                    SupportDocumentsView(model: model)
+                case .privacy:
+                    PrivacyReviewView(model: model)
+                case .demonstration:
+                    DemonstrationModeView(model: model)
+                case .settings:
+                    TeacherSettingsView(model: model)
+                }
             }
         }
         .alert("Autorisation d’enregistrer", isPresented: $model.authorizationRequested) {
