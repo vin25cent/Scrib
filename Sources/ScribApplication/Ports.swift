@@ -37,6 +37,33 @@ public protocol DocumentRendering: Sendable {
     func render(courseID: CourseID, transcript: String) async throws
 }
 
+public protocol ProcessingJobRepository: Sendable {
+    func save(_ job: ProcessingJob) async throws
+    func job(id: ProcessingJobID) async throws -> ProcessingJob?
+    func jobs() async throws -> [ProcessingJob]
+    func delete(id: ProcessingJobID) async throws
+}
+
+public struct ProcessingStepResult: Equatable, Sendable {
+    public var outputFingerprint: String?
+
+    public init(outputFingerprint: String? = nil) {
+        self.outputFingerprint = outputFingerprint
+    }
+}
+
+public protocol PipelineStepExecuting: Sendable {
+    func execute(
+        stage: ProcessingStage,
+        courseID: CourseID
+    ) async throws -> ProcessingStepResult
+}
+
 public protocol SystemConditionsMonitoring: Sendable {
-    var canRunHeavyProcessing: Bool { get async }
+    func currentSnapshot() async -> SystemConditionSnapshot
+}
+
+public protocol ProcessingNotificationSending: Sendable {
+    func processingDidComplete(job: ProcessingJob) async
+    func processingNeedsAttention(job: ProcessingJob) async
 }

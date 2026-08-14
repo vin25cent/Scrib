@@ -1,3 +1,4 @@
+import Foundation
 import ScribDomain
 
 public enum ProcessingTransitionError: Error, Equatable {
@@ -14,6 +15,7 @@ public struct ProcessingStateMachine: Sendable {
 
         var updated = job
         updated.status = newStatus
+        updated.updatedAt = Date()
 
         if newStatus == .processing, updated.stage == nil {
             updated.stage = .preparing
@@ -31,7 +33,7 @@ public struct ProcessingStateMachine: Sendable {
         .recording: [.captured],
         .captured: [.queued],
         .queued: [.processing],
-        .processing: [.suspended, .needsAttention, .completed],
+        .processing: [.queued, .suspended, .needsAttention, .completed],
         .suspended: [.queued],
         .needsAttention: [.queued],
         .completed: []

@@ -42,6 +42,12 @@ final class RecordingViewModel: ObservableObject {
     @Published private(set) var currentCourse: Course?
     @Published private(set) var lastAvailableCapacity: Int64?
     @Published private(set) var lowSoundWarning = false
+    @Published private(set) var processingJobs: [ProcessingJob] = []
+    @Published private(set) var systemConditions = SystemConditionSnapshot(
+        isOnExternalPower: false,
+        isNetworkAvailable: false,
+        thermalCondition: .unknown
+    )
     @Published var authorizationRequested = false
     @Published var errorMessage: String?
     @Published var quitWarningRequested = false
@@ -49,21 +55,27 @@ final class RecordingViewModel: ObservableObject {
     private let recorder: any AudioRecording
     private let fileStore: any CourseFileStoring
     private let teacherStore: any TeacherAuthorizationStoring
+    private let queueCoordinator: ProcessingQueueCoordinator
     private let readinessValidator = RecordingReadinessValidator()
     private var pendingTeacher: Teacher?
     private var pollingTask: Task<Void, Never>?
+    private var queuePollingTask: Task<Void, Never>?
     private var lowSoundStartedAt: Date?
     private var systemActivity: NSObjectProtocol?
 
     init(
         recorder: any AudioRecording,
         fileStore: any CourseFileStoring,
-        teacherStore: any TeacherAuthorizationStoring
+        teacherStore: any TeacherAuthorizationStoring,
+        queueCoordinator: ProcessingQueueCoordinator,
+        startupWarning: String? = nil
     ) {
         self.recorder = recorder
         self.fileStore = fileStore
         self.teacherStore = teacherStore
+        self.queueCoordinator = queueCoordinator
         self.savedTeachers = teacherStore.teachers()
+        self.errorMessage = startupWarning
     }
 
     var teachingUnits: [TeachingUnit] {
@@ -128,6 +140,36 @@ final class RecordingViewModel: ObservableObject {
         Task { await beginRecording(with: teacher) }
     }
 
+    func prepareQueue() async {
+        do {
+            try await queueCoordinator.recoverInterruptedJobs()
+            await reloadQueue()
+            startQueuePolling()
+        } catch {
+            errorMessage = "La file d’attente n’a pas pu être restaurée : \(error.localizedDescription)"
+        }
+    }
+
+    func reloadQueue() async {
+        do {
+            processingJobs = try await queueCoordinator.jobs()
+            systemConditions = await queueCoordinator.currentConditions()
+        } catch {
+            errorMessage = "La file d’attente n’a pas pu être lue : \(error.localizedDescription)"
+        }
+    }
+
+    func retry(_ job: ProcessingJob) {
+        Task {
+            do {
+                try await queueCoordinator.retry(jobID: job.id)
+                await reloadQueue()
+            } catch {
+                errorMessage = "Le cours n’a pas pu être relancé : \(error.localizedDescription)"
+            }
+        }
+    }
+
     func confirmAuthorizationAndStart() {
         guard var teacher = pendingTeacher else { return }
         teacher.confirmRecordingAuthorization()
@@ -172,6 +214,18 @@ final class RecordingViewModel: ObservableObject {
             stopPolling()
             endSystemActivity()
             selectedSection = .segments
+            let capturedCourse = currentCourse
+            Task {
+                await queueCoordinator.recordingDidStop()
+                if let capturedCourse {
+                    do {
+                        _ = try await queueCoordinator.enqueue(course: capturedCourse)
+                    } catch {
+                        errorMessage = "Le cours n’a pas pu être ajouté à la file : \(error.localizedDescription)"
+                    }
+                }
+                await reloadQueue()
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -212,7 +266,13 @@ final class RecordingViewModel: ObservableObject {
                 return
             }
 
-            try recorder.start(courseID: course.id, directory: directory)
+            await queueCoordinator.recordingDidStart()
+            do {
+                try recorder.start(courseID: course.id, directory: directory)
+            } catch {
+                await queueCoordinator.recordingDidStop()
+                throw error
+            }
             currentCourse = course
             updateSnapshot()
             beginSystemActivity()
@@ -245,12 +305,27 @@ final class RecordingViewModel: ObservableObject {
         lowSoundWarning = false
     }
 
+    private func startQueuePolling() {
+        queuePollingTask?.cancel()
+        queuePollingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                await self?.reloadQueue()
+                do {
+                    try await Task.sleep(for: .seconds(3))
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
     private func updateSnapshot() {
         snapshot = recorder.snapshot()
         updateLowSoundWarning()
         if snapshot.state == .failed {
             stopPolling()
             endSystemActivity()
+            Task { await queueCoordinator.recordingDidStop() }
             errorMessage = snapshot.incidentMessage ?? "L’enregistrement audio s’est interrompu."
         }
     }

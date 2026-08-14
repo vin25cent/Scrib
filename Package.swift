@@ -15,7 +15,10 @@ var targets: [Target] = [
     ),
     .target(
         name: "ScribInfrastructure",
-        dependencies: ["ScribDomain", "ScribApplication"]
+        dependencies: ["ScribDomain", "ScribApplication"],
+        linkerSettings: [
+            .linkedFramework("IOKit", .when(platforms: [.macOS]))
+        ]
     ),
     .testTarget(
         name: "ScribDomainTests",

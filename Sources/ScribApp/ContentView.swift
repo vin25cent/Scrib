@@ -27,11 +27,7 @@ struct ContentView: View {
             case .segments:
                 SegmentsView(model: model)
             case .queue:
-                PlaceholderView(
-                    title: "File d’attente",
-                    message: "La file persistante sera ajoutée à la phase suivante.",
-                    systemImage: "arrow.right.circle"
-                )
+                ProcessingQueueView(model: model)
             case .settings:
                 TeacherSettingsView(model: model)
             }
@@ -60,6 +56,9 @@ struct ContentView: View {
             }
         } message: {
             Text("Quitter maintenant finalisera le segment courant avant de fermer Scrib.")
+        }
+        .task {
+            await model.prepareQueue()
         }
     }
 
@@ -345,6 +344,135 @@ private struct TeacherSettingsView: View {
             }
         }
         .navigationTitle("Réglages")
+    }
+}
+
+private struct ProcessingQueueView: View {
+    @ObservedObject var model: RecordingViewModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            conditionBar
+            if model.processingJobs.isEmpty {
+                PlaceholderView(
+                    title: "File vide",
+                    message: "Les cours terminés apparaîtront ici et reprendront au dernier checkpoint valide.",
+                    systemImage: "checkmark.circle"
+                )
+            } else {
+                List(model.processingJobs) { job in
+                    HStack(spacing: 16) {
+                        statusIcon(for: job)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(job.courseTitle.isEmpty ? "Cours sans titre" : job.courseTitle)
+                                .font(.headline)
+                            Text(job.teachingUnit)
+                                .foregroundStyle(.secondary)
+                            ProgressView(value: job.progress)
+                                .frame(maxWidth: 320)
+                            HStack {
+                                Text(job.status.displayName)
+                                if let stage = job.stage {
+                                    Text("· \(stage.displayName)")
+                                }
+                                if !job.suspensionReasons.isEmpty {
+                                    Text("· \(job.suspensionReasons.map(\.displayName).joined(separator: ", "))")
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            if let error = job.lastError {
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                        Spacer()
+                        if job.status == .needsAttention {
+                            Button("Relancer") { model.retry(job) }
+                        }
+                    }
+                    .padding(.vertical, 7)
+                }
+            }
+        }
+        .navigationTitle("File d’attente")
+    }
+
+    private var conditionBar: some View {
+        HStack(spacing: 18) {
+            conditionLabel(
+                model.systemConditions.isOnExternalPower,
+                ready: "Secteur",
+                blocked: "Batterie",
+                icon: "powerplug"
+            )
+            conditionLabel(
+                model.systemConditions.isNetworkAvailable,
+                ready: "Internet",
+                blocked: "Hors ligne",
+                icon: "network"
+            )
+            conditionLabel(
+                model.systemConditions.thermalCondition == .nominal
+                    || model.systemConditions.thermalCondition == .fair,
+                ready: "Température normale",
+                blocked: "Température élevée",
+                icon: "thermometer.medium"
+            )
+            conditionLabel(
+                model.systemConditions.memoryCondition == .normal,
+                ready: "Mémoire disponible",
+                blocked: "Pression mémoire",
+                icon: "memorychip"
+            )
+            Spacer()
+            if !model.systemConditions.canRunHeavyProcessing {
+                Text("Traitement suspendu")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+            } else {
+                Text("Prêt pour les futurs moteurs")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.bar)
+    }
+
+    private func conditionLabel(
+        _ isReady: Bool,
+        ready: String,
+        blocked: String,
+        icon: String
+    ) -> some View {
+        Label(isReady ? ready : blocked, systemImage: icon)
+            .font(.caption)
+            .foregroundStyle(isReady ? .green : .orange)
+    }
+
+    private func statusIcon(for job: ProcessingJob) -> some View {
+        let icon: String
+        let color: Color
+        switch job.status {
+        case .completed:
+            icon = "checkmark.circle.fill"
+            color = .green
+        case .needsAttention:
+            icon = "exclamationmark.triangle.fill"
+            color = .red
+        case .suspended:
+            icon = "pause.circle.fill"
+            color = .orange
+        default:
+            icon = "clock.fill"
+            color = .blue
+        }
+        return Image(systemName: icon)
+            .font(.title2)
+            .foregroundStyle(color)
     }
 }
 

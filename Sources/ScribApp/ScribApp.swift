@@ -5,11 +5,25 @@ import SwiftUI
 @main
 @MainActor
 struct ScribDesktopApp: App {
-    @StateObject private var model = RecordingViewModel(
-        recorder: AVFoundationAudioRecorder(),
-        fileStore: MacCourseFileStore(),
-        teacherStore: UserDefaultsTeacherAuthorizationStore()
-    )
+    private let environment: AppEnvironment
+    @StateObject private var model: RecordingViewModel
+
+    init() {
+        let environment = AppEnvironment.live()
+        self.environment = environment
+        _model = StateObject(
+            wrappedValue: RecordingViewModel(
+                recorder: AVFoundationAudioRecorder(),
+                fileStore: MacCourseFileStore(),
+                teacherStore: UserDefaultsTeacherAuthorizationStore(),
+                queueCoordinator: environment.queueCoordinator,
+                startupWarning: environment.persistenceWarning
+            )
+        )
+        Task {
+            await MacProcessingNotificationSender().requestAuthorization()
+        }
+    }
 
     var body: some Scene {
         WindowGroup("Scrib") {
