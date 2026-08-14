@@ -31,7 +31,7 @@ jobs:
       - name: Build the macOS application target
         run: |
           set -o pipefail
-          if ! swift build --product ScribApp -v 2>&1 | tee swift-build.log; then
+          if ! swift build --product ScribApp --jobs 1 -Xswiftc -disable-batch-mode -v 2>&1 | tee swift-build.log; then
             grep -E '(^|: )error:' swift-build.log | tail -20 | while IFS= read -r line; do
               escaped="${line//'%'/'%25'}"
               echo "::error::$escaped"
@@ -46,7 +46,7 @@ jobs:
           fi
 
       - name: Run all tests
-        run: swift test
+        run: swift test --jobs 1 -Xswiftc -disable-batch-mode
 
       - name: Package the unsigned application
         run: bash Scripts/Package-MacApp.sh release artifacts
