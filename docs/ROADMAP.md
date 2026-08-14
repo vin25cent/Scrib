@@ -52,12 +52,19 @@ Jalon : décision documentée du moteur compatible avec 8 Go.
 horodatages et facteur temps réel implémentés. Les références humaines et les
 mesures RAM/thermique restent à exécuter sur le MacBook cible.
 
+La v0.1.0-alpha.2 intègre WhisperKit 1.0.0 comme **premier adaptateur
+expérimental**, derrière le port de transcription. Tiny multilingue sert aux
+smoke tests et Small multilingue aux premiers essais français. Le téléchargement
+est volontaire, la transcription devient ensuite hors ligne, et le résultat brut
+horodaté est persisté avant toute génération. Cette intégration ne clôt pas la
+décision du moteur : whisper.cpp reste un candidat du benchmark.
+
 L’interface préparatoire est disponible : éditeur de transcription, recherche,
 corrections, renvois audio, passages incertains et informations médicales
 importantes. Un mode démonstration local permet de tester ces parcours sans média
 personnel. Deux courts audios médicaux français réutilisables sous CC BY-SA 4.0
 sont catalogués et téléchargés à la demande avec vérification SHA-256. Le
-raccordement au moteur retenu reste conditionné au benchmark.
+raccordement d’un moteur définitif reste conditionné au benchmark réel sur M1.
 
 Le pipeline de démonstration est exécutable de bout en bout avec un WAV local :
 copie de travail, normalisation neutre explicitement simulée, transcription

@@ -1,24 +1,16 @@
-# Installer Scrib 0.1.0-alpha.1 sur macOS
+# Installer Scrib 0.1.0-alpha.2 sur macOS
 
-Cette première alpha cible un Mac Apple Silicon sous macOS 14 ou plus récent.
-Elle ne nécessite ni Xcode, ni Swift, ni commande de compilation.
+Cette alpha cible un Mac Apple Silicon sous macOS 14 ou plus récent. Pour
+l’utiliser, le Mac n’a besoin ni de Xcode, ni de Swift, ni de Homebrew, ni de
+Python, ni de Terminal.
 
 ## Télécharger
 
-1. Ouvrir la page [Scrib 0.1.0-alpha.1](https://github.com/vin25cent/Scrib/releases/tag/v0.1.0-alpha.1).
-2. Dans **Assets**, télécharger `Scrib-0.1.0-alpha.1-macOS.zip`.
-3. Télécharger également le fichier portant le même nom suivi de `.sha256`.
+1. Ouvrir la page [Scrib 0.1.0-alpha.2](https://github.com/vin25cent/Scrib/releases/tag/v0.1.0-alpha.2).
+2. Dans **Assets**, télécharger `Scrib-0.1.0-alpha.2-macOS.zip`.
+3. Le fichier `.sha256` joint permet un contrôle d’intégrité facultatif.
 
-Le contrôle d’intégrité est facultatif mais recommandé. Dans Terminal, saisir :
-
-```bash
-cd ~/Downloads
-shasum -a 256 -c Scrib-0.1.0-alpha.1-macOS.zip.sha256
-```
-
-Le résultat attendu se termine par `OK`.
-
-## Installer et ouvrir
+## Installer et ouvrir sans Terminal
 
 1. Double-cliquer sur l’archive ZIP téléchargée.
 2. Faire glisser `Scrib.app` dans le dossier **Applications**.
@@ -26,16 +18,8 @@ Le résultat attendu se termine par `OK`.
 4. Confirmer une seconde fois avec **Ouvrir**.
 
 Scrib utilise une signature ad hoc et n’est pas encore notarée. Si macOS bloque
-quand même l’ouverture, aller dans **Réglages Système → Confidentialité et
-sécurité**, puis choisir **Ouvrir quand même** pour Scrib.
-
-En dernier recours seulement, après avoir vérifié l’empreinte SHA-256 ci-dessus :
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Scrib.app
-```
-
-Relancer ensuite Scrib depuis Applications.
+l’ouverture, aller dans **Réglages Système → Confidentialité et sécurité**, puis
+choisir **Ouvrir quand même** pour Scrib. Aucune commande n’est nécessaire.
 
 ## Autorisations au premier lancement
 
@@ -44,28 +28,41 @@ Relancer ensuite Scrib depuis Applications.
 - Les documents enseignant ne sont accessibles que lorsqu’ils sont choisis dans
   l’application.
 
-Une clé API n’est pas nécessaire pour la démonstration. Si une clé est ajoutée
-plus tard, elle est enregistrée dans le Trousseau macOS et les appels payants
-restent désactivés jusqu’à leur activation explicite.
+Aucune clé API n’est nécessaire pour la transcription locale. Les réglages IA
+cloud restent séparés et désactivés par défaut.
 
-## Premier essai recommandé
+## Premier essai de transcription réelle
 
-1. Ouvrir **Démonstration** et charger le jeu de données fictif.
-2. Ouvrir **Confidentialité** et approuver la revue locale.
-3. Ouvrir **Réglages → Intelligence artificielle**.
-4. Choisir le modèle simulé puis lancer **Tester ce modèle**.
-5. Vérifier le suivi du cours et les deux documents Word générés.
-6. Faire ensuite un court enregistrement micro de 20 à 30 secondes.
+1. Ouvrir **Transcription locale**.
+2. Sélectionner **Tiny multilingue** puis cliquer **Télécharger**. Une connexion
+   Internet est nécessaire pour ce téléchargement volontaire uniquement.
+3. Attendre l’état **Modèle disponible hors ligne**.
+4. Ouvrir **Nouveau cours**, remplir les informations puis démarrer.
+5. Parler en français pendant environ une minute ; tester une pause et une reprise.
+6. Arrêter l’enregistrement. Scrib ouvre l’écran expérimental.
+7. Cliquer **Transcrire localement** et observer la progression.
+8. À la fin, vérifier le facteur temps réel puis ouvrir le résultat dans l’éditeur.
+9. Fermer Scrib, le rouvrir et vérifier que la transcription est toujours présente.
+10. Refaire ensuite le test avec 10 à 30 minutes, puis avec Small multilingue.
 
-## Limites connues de cette alpha
+## Modèles
 
-- La transcription d’un véritable enregistrement n’a pas encore de moteur local :
-  le pipeline de démonstration utilise une transcription simulée et identifiable.
+- **Tiny multilingue**, environ 76,6 Mo : tests techniques et diagnostic rapide.
+- **Small multilingue**, environ 486 Mo : premiers essais de qualité en français.
+
+Les tailles peuvent évoluer légèrement dans le dépôt de modèles. Scrib affiche
+la taille réellement installée. Un modèle déjà disponible n’est pas téléchargé
+à nouveau. Les modèles sont conservés dans
+`~/Library/Application Support/Scrib/Models/WhisperKit` et fonctionnent hors ligne.
+
+## Limites connues
+
+- WhisperKit n’est pas encore le choix définitif du moteur de Scrib.
+- La diarisation et la correction LLM sont absentes.
+- La transcription affichée est volontairement le résultat ASR brut.
+- Les métriques M1 ne seront considérées comme validées qu’après le test réel.
 - L’application n’est ni notarée ni destinée à une diffusion publique large.
-- Le microphone interne, la veille et les chemins d’ouverture des documents
-  doivent encore être validés sur le MacBook cible.
-- Utiliser uniquement des données fictives pendant les premiers essais.
 
-Les données de travail sont enregistrées localement dans
+Les cours, segments et transcriptions restent sous
 `~/Library/Application Support/Scrib`. Conserver l’archive téléchargée permet de
 réinstaller exactement cette version.

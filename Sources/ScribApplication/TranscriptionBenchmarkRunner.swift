@@ -5,7 +5,7 @@ public protocol TranscriptionBenchmarkAdapter: Sendable {
     var engineID: String { get }
     var engineVersion: String { get }
     var modelID: String { get }
-    func transcribe(_ benchmarkCase: TranscriptionBenchmarkCase) throws -> BenchmarkAdapterOutput
+    func transcribe(_ benchmarkCase: TranscriptionBenchmarkCase) async throws -> BenchmarkAdapterOutput
 }
 
 public struct TranscriptionBenchmarkRunner: Sendable {
@@ -16,14 +16,17 @@ public struct TranscriptionBenchmarkRunner: Sendable {
     public func run(
         cases: [TranscriptionBenchmarkCase],
         adapters: [any TranscriptionBenchmarkAdapter],
-        thermalStateBefore: ThermalCondition = .unknown
-    ) -> TranscriptionBenchmarkRun {
+        thermalStateBefore: ThermalCondition = .unknown,
+        machine: TranscriptionMachineInformation? = nil
+    ) async -> TranscriptionBenchmarkRun {
         var results: [TranscriptionBenchmarkResult] = []
         var failures: [TranscriptionBenchmarkFailure] = []
+        var resolvedMachine = machine
         for adapter in adapters {
             for item in cases {
                 do {
-                    let output = try adapter.transcribe(item)
+                    let output = try await adapter.transcribe(item)
+                    if resolvedMachine == nil { resolvedMachine = output.machine }
                     results.append(.init(
                         engineID: adapter.engineID,
                         engineVersion: adapter.engineVersion,
@@ -50,7 +53,18 @@ public struct TranscriptionBenchmarkRunner: Sendable {
                 }
             }
         }
-        return .init(results: results, failures: failures)
+        return .init(machine: resolvedMachine, results: results, failures: failures)
+    }
+
+    public func encodedReport(_ run: TranscriptionBenchmarkRun) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(run)
+    }
+
+    public func writeReport(_ run: TranscriptionBenchmarkRun, to destination: URL) throws {
+        try encodedReport(run).write(to: destination, options: .atomic)
     }
 }
 

@@ -17,7 +17,7 @@ case "$archive_stem" in
     ;;
 esac
 
-swift build -c "$configuration" --product ScribApp
+swift build -c "$configuration" --product ScribApp --jobs 1 -Xswiftc -disable-batch-mode
 binary_path="$(swift build -c "$configuration" --product ScribApp --show-bin-path)/ScribApp"
 app_path="$output_directory/Scrib.app"
 archive_path="$output_directory/$archive_stem.zip"

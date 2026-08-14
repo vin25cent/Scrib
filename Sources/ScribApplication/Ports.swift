@@ -67,7 +67,27 @@ public protocol AIGenerationPreferencesStoring: AnyObject {
 }
 
 public protocol TranscriptionEngine: Sendable {
-    func transcribe(courseID: CourseID) async throws -> String
+    var descriptor: TranscriptionEngineDescriptor { get }
+    func transcribe(
+        _ request: LocalTranscriptionRequest,
+        progress: @escaping @Sendable (LocalTranscriptionProgress) -> Void
+    ) async throws -> LocalTranscriptionResult
+    func unload() async
+}
+
+public protocol TranscriptionModelManaging: Sendable {
+    var availableModels: [TranscriptionModelDescriptor] { get }
+    func status(for modelID: LocalTranscriptionModelID) async -> TranscriptionModelStatus
+    func download(
+        _ modelID: LocalTranscriptionModelID,
+        progress: @escaping @Sendable (TranscriptionModelStatus) -> Void
+    ) async throws -> TranscriptionModelStatus
+}
+
+public protocol LocalTranscriptionStoring: Sendable {
+    func save(_ transcription: StoredLocalTranscription) async throws
+    func updateDraft(_ draft: TranscriptDraft) async throws
+    func latest() async throws -> StoredLocalTranscription?
 }
 
 public protocol DocumentRendering: Sendable {

@@ -4,10 +4,11 @@ Scrib est une application macOS native destinée à enregistrer des cours IFSI, 
 transcrire localement, puis produire automatiquement deux documents Microsoft
 Word : un cours structuré fidèle et une fiche de révision.
 
-Le dépôt contient la spécification, l'architecture et les prototypes Swift de
-l'enregistrement, de la file persistante, des métriques de transcription et du
-rendu DOCX. Le moteur de transcription reste à choisir ; l’adaptateur OpenAI est
-préparé mais tous les appels payants sont désactivés par défaut.
+Le dépôt contient la spécification, l'architecture et l'alpha Swift de
+l'enregistrement, de la transcription locale, de la file persistante, des
+métriques et du rendu DOCX. WhisperKit est intégré comme premier moteur
+expérimental de benchmark ; le choix définitif reste ouvert. Tous les appels
+payants sont désactivés par défaut.
 
 ## Documents de référence
 
@@ -21,7 +22,8 @@ préparé mais tous les appels payants sont désactivés par défaut.
 - [Contrat JSON de génération](docs/STRUCTURED_GENERATION.md)
 - [Barrière locale de confidentialité](docs/PRIVACY_GATE.md)
 - [Génération IA et banc d’essai](docs/AI_GENERATION.md)
-- [Installer la première alpha sur macOS](docs/INSTALLATION_ALPHA_MACOS.md)
+- [Installer l’alpha sur macOS](docs/INSTALLATION_ALPHA_MACOS.md)
+- [Notes de version 0.1.0-alpha.2](docs/RELEASE_NOTES_0.1.0_ALPHA.2.md)
 
 ## Structure
 
@@ -44,8 +46,9 @@ compilée ; les outils de développement pourront rester sur une machine de buil
 ou un service d'intégration continue.
 
 Dans Xcode, ouvrir `Package.swift`, choisir le schéma `ScribApp`, puis lancer la
-cible « My Mac ». Le dépôt ne contient aucune clé API et n’utilise plus de
-dépendance Swift tierce.
+cible « My Mac ». Le dépôt ne contient aucune clé API. WhisperKit 1.0.0 est
+épinglé exactement via Swift Package Manager ; aucun Python, Homebrew, serveur
+local ou ffmpeg externe n’est requis par l’application distribuée.
 
 ### Tests du cœur sur Windows
 
@@ -64,7 +67,8 @@ Windows fourni avec Swift et le toolchain installé dans le profil utilisateur.
 Le workflow `.github/workflows/macos.yml` utilise le runner Apple Silicon
 `macos-15` avec Xcode 16.4 épinglé pour compiler la cible `ScribApp` et exécuter tous les tests après
 chaque envoi sur `main` et pour chaque pull request. Il publie également pendant
-14 jours l’archive de l’alpha, également publiée dans GitHub Releases avec son
+14 jours l’archive de l’alpha. Une release dédiée peut également être publiée
+avec son
 empreinte SHA-256. L’application porte une signature ad hoc vérifiée pendant le
 build ; elle n’est pas notarée et macOS demandera donc une autorisation manuelle
 au premier lancement.
@@ -109,6 +113,13 @@ téléchargent localement avec contrôle SHA-256 :
   immédiate par un nouvel enregistrement ;
 - métriques de benchmark de transcription et corpus S1 préparés pour les UE 2.1,
   2.2, 2.4 et 2.11, sans média versionné ;
+- transcription locale réelle expérimentale par WhisperKit 1.0.0, à partir des
+  vrais segments M4A de Scrib, en français et avec horodatages ;
+- téléchargement volontaire des modèles multilingues Tiny (tests techniques,
+  environ 76,6 Mo) et Small (premiers essais qualité, environ 486 Mo), puis
+  fonctionnement hors ligne ;
+- progression, annulation, provenance moteur/modèle, facteur temps réel,
+  contexte machine et persistance de la transcription brute ;
 - premier renderer DOCX déterministe en Swift pur et deux documents témoins
   fictifs, désormais en A4 avec sommaire, tableaux, figures et liens audio ;
 - contrat JSON `1.0` validé localement et filtre patient bloquant avant le cloud ;
@@ -117,8 +128,8 @@ téléchargent localement avec contrôle SHA-256 :
   locale avant rendu ;
 - clé API conservée dans le Trousseau macOS, appels payants désactivés par défaut,
   plafond total bloquant et historique comparatif coût/jetons/durée ;
-- adaptateurs simulés permettant de tester le benchmark sans modèle ni audio ;
-- aucun moteur ML de transcription branché et aucun appel API exécuté en CI.
+- adaptateurs simulés conservés pour tester le benchmark sans modèle ni audio ;
+- aucun modèle ML lourd téléchargé et aucun appel API exécuté en CI.
 
 ## Confidentialité du dépôt
 

@@ -13,6 +13,7 @@ struct ContentView: View {
                     Section("COURS") {
                         navigationRow(.newCourse)
                         navigationRow(.segments)
+                        navigationRow(.localTranscription)
                         navigationRow(.queue)
                     }
                     Section("CONTENU") {
@@ -42,6 +43,8 @@ struct ContentView: View {
                     NewCourseView(model: model)
                 case .segments:
                     SegmentsView(model: model)
+                case .localTranscription:
+                    LocalTranscriptionView(model: model)
                 case .queue:
                     ProcessingQueueView(model: model)
                 case .transcript:

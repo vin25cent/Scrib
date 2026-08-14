@@ -16,21 +16,31 @@ public struct TranscriptPassage: Identifiable, Equatable, Codable, Sendable {
     public let id: UUID
     public var speaker: String
     public var startTime: TimeInterval
+    public var endTime: TimeInterval?
     public var text: String
     public var flags: Set<TranscriptPassageFlag>
+    public var sourceRecordingSegmentID: UUID?
+    public var confidence: Double?
 
     public init(
         id: UUID = UUID(),
         speaker: String,
         startTime: TimeInterval,
+        endTime: TimeInterval? = nil,
         text: String,
-        flags: Set<TranscriptPassageFlag> = []
+        flags: Set<TranscriptPassageFlag> = [],
+        sourceRecordingSegmentID: UUID? = nil,
+        confidence: Double? = nil
     ) {
         self.id = id
         self.speaker = speaker.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.startTime = max(startTime, 0)
+        let normalizedStartTime = max(startTime, 0)
+        self.startTime = normalizedStartTime
+        self.endTime = endTime.map { max($0, normalizedStartTime) }
         self.text = text
         self.flags = flags
+        self.sourceRecordingSegmentID = sourceRecordingSegmentID
+        self.confidence = confidence.map { min(max($0, 0), 1) }
     }
 }
 
@@ -42,6 +52,9 @@ public struct TranscriptDraft: Equatable, Codable, Sendable {
     public var version: Int
     public var updatedAt: Date
     public var isDemonstration: Bool
+    public var transcriptionEngine: TranscriptionEngineDescriptor?
+    public var transcriptionModelID: LocalTranscriptionModelID?
+    public var rawTranscriptionCompletedAt: Date?
 
     public init(
         courseID: CourseID = CourseID(),
@@ -50,7 +63,10 @@ public struct TranscriptDraft: Equatable, Codable, Sendable {
         passages: [TranscriptPassage] = [],
         version: Int = 1,
         updatedAt: Date = Date(),
-        isDemonstration: Bool = false
+        isDemonstration: Bool = false,
+        transcriptionEngine: TranscriptionEngineDescriptor? = nil,
+        transcriptionModelID: LocalTranscriptionModelID? = nil,
+        rawTranscriptionCompletedAt: Date? = nil
     ) {
         self.courseID = courseID
         self.courseTitle = courseTitle
@@ -59,6 +75,9 @@ public struct TranscriptDraft: Equatable, Codable, Sendable {
         self.version = max(version, 1)
         self.updatedAt = updatedAt
         self.isDemonstration = isDemonstration
+        self.transcriptionEngine = transcriptionEngine
+        self.transcriptionModelID = transcriptionModelID
+        self.rawTranscriptionCompletedAt = rawTranscriptionCompletedAt
     }
 
     public var plainText: String {

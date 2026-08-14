@@ -80,6 +80,13 @@ $developerPath = $env:Path
 Remove-Item Env:PATH -ErrorAction SilentlyContinue
 $env:Path = "$toolchainBin;$runtimeBin;$developerPath"
 
+# SwiftPM checks out Apple packages containing test-only symbolic links. On
+# Windows those links require privileges Scrib does not need, so materialize
+# them as ordinary files for this process only.
+$env:GIT_CONFIG_COUNT = "1"
+$env:GIT_CONFIG_KEY_0 = "core.symlinks"
+$env:GIT_CONFIG_VALUE_0 = "false"
+
 & (Join-Path $toolchainBin "swift.exe") --version
 & (Join-Path $toolchainBin "swift.exe") test
 exit $LASTEXITCODE

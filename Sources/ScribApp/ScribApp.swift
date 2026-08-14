@@ -22,6 +22,7 @@ struct ScribDesktopApp: App {
                 aiOrchestrator: environment.aiOrchestrator,
                 aiSecretStore: environment.aiSecretStore,
                 aiPreferencesStore: environment.aiPreferencesStore,
+                transcriptionCoordinator: environment.transcriptionCoordinator,
                 startupWarning: environment.persistenceWarning
             )
         )

@@ -122,6 +122,7 @@ public struct BenchmarkAdapterOutput: Equatable, Codable, Sendable {
     public var peakResidentMemoryBytes: Int64?
     public var modelSizeBytes: Int64?
     public var highestThermalState: ThermalCondition
+    public var machine: TranscriptionMachineInformation?
 
     public init(
         transcript: String,
@@ -129,7 +130,8 @@ public struct BenchmarkAdapterOutput: Equatable, Codable, Sendable {
         processingDurationSeconds: Double,
         peakResidentMemoryBytes: Int64? = nil,
         modelSizeBytes: Int64? = nil,
-        highestThermalState: ThermalCondition = .unknown
+        highestThermalState: ThermalCondition = .unknown,
+        machine: TranscriptionMachineInformation? = nil
     ) {
         self.transcript = transcript
         self.timestamps = timestamps
@@ -137,6 +139,7 @@ public struct BenchmarkAdapterOutput: Equatable, Codable, Sendable {
         self.peakResidentMemoryBytes = peakResidentMemoryBytes
         self.modelSizeBytes = modelSizeBytes
         self.highestThermalState = highestThermalState
+        self.machine = machine
     }
 }
 
@@ -153,10 +156,22 @@ public struct TranscriptionBenchmarkFailure: Equatable, Codable, Sendable {
 }
 
 public struct TranscriptionBenchmarkRun: Equatable, Codable, Sendable {
+    public var schemaVersion: Int
+    public var generatedAt: Date
+    public var machine: TranscriptionMachineInformation?
     public var results: [TranscriptionBenchmarkResult]
     public var failures: [TranscriptionBenchmarkFailure]
 
-    public init(results: [TranscriptionBenchmarkResult], failures: [TranscriptionBenchmarkFailure]) {
+    public init(
+        schemaVersion: Int = 1,
+        generatedAt: Date = Date(),
+        machine: TranscriptionMachineInformation? = nil,
+        results: [TranscriptionBenchmarkResult],
+        failures: [TranscriptionBenchmarkFailure]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.generatedAt = generatedAt
+        self.machine = machine
         self.results = results
         self.failures = failures
     }

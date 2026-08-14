@@ -9,6 +9,7 @@ struct AppEnvironment {
     let aiOrchestrator: StructuredGenerationOrchestrator
     let aiSecretStore: any AISecretStoring
     let aiPreferencesStore: any AIGenerationPreferencesStoring
+    let transcriptionCoordinator: LocalTranscriptionCoordinator
     let persistenceWarning: String?
 
     static func live() -> AppEnvironment {
@@ -56,6 +57,26 @@ struct AppEnvironment {
         )
         let aiPreferencesStore = UserDefaultsAIGenerationPreferencesStore()
 
+        let transcriptionCoordinator: LocalTranscriptionCoordinator
+        do {
+            let modelManager = try WhisperKitModelManager()
+            let transcriptionStore = try LocalTranscriptionStore()
+            transcriptionCoordinator = LocalTranscriptionCoordinator(
+                engine: WhisperKitTranscriptionEngine(modelManager: modelManager),
+                modelManager: modelManager,
+                store: transcriptionStore
+            )
+        } catch {
+            let message = "La transcription locale ne peut pas initialiser son stockage : \(error.localizedDescription)"
+            let unavailableManager = UnavailableTranscriptionModelManager(message: message)
+            transcriptionCoordinator = LocalTranscriptionCoordinator(
+                engine: UnavailableTranscriptionEngine(message: message),
+                modelManager: unavailableManager,
+                store: InMemoryLocalTranscriptionStore()
+            )
+            warnings.append(message)
+        }
+
         return AppEnvironment(
             queueCoordinator: coordinator,
             demonstrationPipeline: LocalDemonstrationPipeline(repository: repository),
@@ -63,6 +84,7 @@ struct AppEnvironment {
             aiOrchestrator: aiOrchestrator,
             aiSecretStore: aiSecretStore,
             aiPreferencesStore: aiPreferencesStore,
+            transcriptionCoordinator: transcriptionCoordinator,
             persistenceWarning: warnings.isEmpty ? nil : warnings.joined(separator: "\n")
         )
     }

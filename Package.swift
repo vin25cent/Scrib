@@ -8,6 +8,24 @@ var products: [Product] = [
     .executable(name: "ScribDocxPreview", targets: ["ScribDocxPreview"])
 ]
 
+var infrastructureDependencies: [Target.Dependency] = [
+    "ScribDomain",
+    "ScribApplication"
+]
+var packageDependencies: [Package.Dependency] = []
+
+#if !os(Windows)
+infrastructureDependencies.append(
+    .product(name: "WhisperKit", package: "argmax-oss-swift")
+)
+packageDependencies.append(
+    .package(
+        url: "https://github.com/argmaxinc/argmax-oss-swift.git",
+        exact: "1.0.0"
+    )
+)
+#endif
+
 var targets: [Target] = [
     .target(name: "ScribDomain"),
     .target(
@@ -16,10 +34,7 @@ var targets: [Target] = [
     ),
     .target(
         name: "ScribInfrastructure",
-        dependencies: [
-            "ScribDomain",
-            "ScribApplication"
-        ],
+        dependencies: infrastructureDependencies,
         linkerSettings: [
             .linkedFramework("AVFoundation", .when(platforms: [.macOS])),
             .linkedLibrary("compression", .when(platforms: [.macOS])),
@@ -74,6 +89,6 @@ let package = Package(
         .macOS(.v14)
     ],
     products: products,
-    dependencies: [],
+    dependencies: packageDependencies,
     targets: targets
 )

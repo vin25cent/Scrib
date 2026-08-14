@@ -17,6 +17,10 @@ Ces choix ne doivent pas être devinés avant les prototypes ou l'arrivée du Ma
 
 ## Éléments manquants
 
+WhisperKit 1.0.0 est seulement le premier adaptateur expérimental de l’alpha.2.
+Ni sa compatibilité pratique avec le M1 cible, ni Tiny, ni Small ne sont encore
+validés comme choix final avant les mesures réelles.
+
 - la maquette PNG créée dans la conversation d'origine n'est pas jointe à ce
   dépôt ; elle devra être ajoutée à `docs/mockups/` ;
 - aucun audio réel ni support enseignant ne doit être ajouté au dépôt public ;

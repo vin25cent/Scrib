@@ -168,8 +168,20 @@ Règles d'implémentation :
 
 ## 8. Transcription locale
 
-Le port `TranscriptionEngine` masque le moteur concret. Deux candidats natifs
-seront benchmarkés sur la machine finale : WhisperKit/Core ML et
+Le port `TranscriptionEngine` masque le moteur concret. Il reçoit désormais une
+requête explicite contenant le cours, les segments audio ordonnés, la langue et
+le modèle ; il renvoie les passages, mots et horodatages avec la provenance et
+les métriques. `LocalTranscriptionCoordinator` assemble et déduplique les
+frontières, construit le `TranscriptDraft` puis persiste atomiquement le résultat
+brut. Aucun chemin global ni singleton audio n’est utilisé.
+
+La v0.1.0-alpha.2 fournit `WhisperKitTranscriptionEngine` comme adaptateur de
+benchmark. Les segments M4A de dix minutes au maximum sont traités un par un,
+avec français forcé, timestamps de mots et un seul worker, afin de borner la
+mémoire. Le modèle est déchargé après le traitement. Le téléchargement est une
+action utilisateur séparée et les modèles vivent sous Application Support.
+
+Deux candidats natifs restent à benchmarker sur la machine finale : WhisperKit/Core ML et
 whisper.cpp/Core ML + Metal. MLX Whisper reste une référence de recherche, car
 son exemple officiel actuel dépend de Python et ne peut pas être livré tel quel
 sur le Mac cible. Le choix final ne doit imposer ni Python ni Homebrew.
@@ -248,7 +260,7 @@ le Mac.
 ## 10.1 Extraction des supports
 
 Le port `SupportDocumentExtracting` sépare l’import du décodage. L’adaptateur
-local lit les DOCX comme des archives OOXML avec ZIPFoundation 0.9.20 épinglé,
+local lit les DOCX comme des archives OOXML avec le lecteur ZIP natif minimal du projet,
 sans LibreOffice ni service réseau dans l’application. Il extrait uniquement les
 parties nécessaires, limite chaque XML à 20 Mio et refuse un package dont les
 métadonnées indiquent qu’il a été généré par Scrib. Les images sont comptées et

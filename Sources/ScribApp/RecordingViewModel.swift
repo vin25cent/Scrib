@@ -11,6 +11,7 @@ final class RecordingViewModel: ObservableObject {
     enum Section: String, CaseIterable, Identifiable {
         case newCourse = "Nouveau cours"
         case segments = "Segments"
+        case localTranscription = "Transcription locale"
         case queue = "Suivi des cours"
         case transcript = "Transcription"
         case supports = "Documents enseignant"
@@ -24,6 +25,7 @@ final class RecordingViewModel: ObservableObject {
             switch self {
             case .newCourse: "plus.circle"
             case .segments: "rectangle.split.2x1"
+            case .localTranscription: "waveform.badge.magnifyingglass"
             case .queue: "clock.arrow.circlepath"
             case .transcript: "text.alignleft"
             case .supports: "doc.badge.plus"
@@ -50,6 +52,7 @@ final class RecordingViewModel: ObservableObject {
     @Published private(set) var savedTeachers: [Teacher] = []
     @Published private(set) var snapshot = AudioRecorderSnapshot()
     @Published private(set) var currentCourse: Course?
+    @Published private(set) var capturedSegments: [RecordingSegment] = []
     @Published private(set) var lastAvailableCapacity: Int64?
     @Published private(set) var lowSoundWarning = false
     @Published private(set) var processingJobs: [ProcessingJob] = []
@@ -60,6 +63,15 @@ final class RecordingViewModel: ObservableObject {
     @Published var transcriptDraft: TranscriptDraft?
     @Published var transcriptSearch = ""
     @Published var transcriptFilter: TranscriptPassageFilter = .all
+    @Published var selectedLocalTranscriptionModel: LocalTranscriptionModelID = .tinyMultilingual
+    @Published private(set) var localModelStatus = TranscriptionModelStatus(
+        modelID: .tinyMultilingual,
+        availability: .notDownloaded
+    )
+    @Published private(set) var localTranscriptionProgress = LocalTranscriptionProgress(stage: .idle)
+    @Published private(set) var lastLocalTranscriptionResult: LocalTranscriptionResult?
+    @Published private(set) var isDownloadingTranscriptionModel = false
+    @Published private(set) var isLocalTranscriptionRunning = false
     @Published private(set) var supportDocuments: [SupportDocument] = []
     @Published private(set) var privacyReview: PrivacyReview?
     @Published private(set) var isDemoMode = false
@@ -91,6 +103,7 @@ final class RecordingViewModel: ObservableObject {
     private let aiOrchestrator: StructuredGenerationOrchestrator
     private let aiSecretStore: any AISecretStoring
     private let aiPreferencesStore: any AIGenerationPreferencesStoring
+    private let transcriptionCoordinator: LocalTranscriptionCoordinator
     private let readinessValidator = RecordingReadinessValidator()
     private let trackingPresenter = CourseTrackingPresenter()
     private let transcriptService = TranscriptWorkspaceService()
@@ -102,6 +115,9 @@ final class RecordingViewModel: ObservableObject {
     private var queuePollingTask: Task<Void, Never>?
     private var lowSoundStartedAt: Date?
     private var systemActivity: NSObjectProtocol?
+    private var modelDownloadTask: Task<Void, Never>?
+    private var localTranscriptionTask: Task<Void, Never>?
+    private var realTranscriptDraft: TranscriptDraft?
 
     init(
         recorder: any AudioRecording,
@@ -113,6 +129,7 @@ final class RecordingViewModel: ObservableObject {
         aiOrchestrator: StructuredGenerationOrchestrator,
         aiSecretStore: any AISecretStoring,
         aiPreferencesStore: any AIGenerationPreferencesStoring,
+        transcriptionCoordinator: LocalTranscriptionCoordinator,
         startupWarning: String? = nil
     ) {
         self.recorder = recorder
@@ -124,6 +141,7 @@ final class RecordingViewModel: ObservableObject {
         self.aiOrchestrator = aiOrchestrator
         self.aiSecretStore = aiSecretStore
         self.aiPreferencesStore = aiPreferencesStore
+        self.transcriptionCoordinator = transcriptionCoordinator
         var loadedAIPreferences = aiPreferencesStore.load()
         if AIModelCatalog.profile(id: loadedAIPreferences.selectedModelProfileID) == nil {
             loadedAIPreferences.selectedModelProfileID = AIModelCatalog.profiles[0].id
@@ -133,6 +151,10 @@ final class RecordingViewModel: ObservableObject {
         self.supportDocuments = supportImporter.documents()
         self.errorMessage = startupWarning
         Task { await refreshAIState() }
+        Task {
+            await refreshLocalModelStatus()
+            await restoreLatestLocalTranscription()
+        }
     }
 
     var teachingUnits: [TeachingUnit] {
@@ -173,6 +195,27 @@ final class RecordingViewModel: ObservableObject {
             matching: transcriptSearch,
             filter: transcriptFilter
         )
+    }
+
+    var localTranscriptionModels: [TranscriptionModelDescriptor] {
+        LocalTranscriptionModelCatalog.alphaModels
+    }
+
+    var selectedLocalTranscriptionModelDescriptor: TranscriptionModelDescriptor {
+        LocalTranscriptionModelCatalog.descriptor(for: selectedLocalTranscriptionModel)
+            ?? LocalTranscriptionModelCatalog.alphaModels[0]
+    }
+
+    var localAudioDuration: TimeInterval {
+        capturedSegments.reduce(0) { $0 + $1.duration }
+    }
+
+    var canStartLocalTranscription: Bool {
+        currentCourse != nil
+            && !capturedSegments.isEmpty
+            && localModelStatus.availability == .available
+            && !isLocalTranscriptionRunning
+            && !isDownloadingTranscriptionModel
     }
 
     var privacyFindings: [PrivacyFinding] {
@@ -270,9 +313,121 @@ final class RecordingViewModel: ObservableObject {
         guard var transcriptDraft else { return }
         transcriptDraft.updatedAt = Date()
         self.transcriptDraft = transcriptDraft
+        persistRealTranscriptIfNeeded(transcriptDraft)
         workspaceNotice = transcriptDraft.isDemonstration
             ? "Modification conservée pour cette session de démonstration."
             : "Transcription enregistrée localement."
+    }
+
+    private func persistRealTranscriptIfNeeded(_ draft: TranscriptDraft) {
+        guard !draft.isDemonstration else { return }
+        realTranscriptDraft = draft
+        Task {
+            do {
+                try await transcriptionCoordinator.saveEditedDraft(draft)
+            } catch {
+                errorMessage = "La modification n’a pas pu être enregistrée : \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func selectLocalTranscriptionModel(_ modelID: LocalTranscriptionModelID) {
+        guard LocalTranscriptionModelCatalog.descriptor(for: modelID)?.isEnabledInAlpha == true else { return }
+        selectedLocalTranscriptionModel = modelID
+        localModelStatus = .init(modelID: modelID, availability: .notDownloaded)
+        Task { await refreshLocalModelStatus() }
+    }
+
+    func refreshLocalModelStatus() async {
+        localModelStatus = await transcriptionCoordinator.modelStatus(for: selectedLocalTranscriptionModel)
+    }
+
+    func downloadSelectedTranscriptionModel() {
+        guard !isDownloadingTranscriptionModel else { return }
+        isDownloadingTranscriptionModel = true
+        let modelID = selectedLocalTranscriptionModel
+        modelDownloadTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let status = try await transcriptionCoordinator.downloadModel(modelID) { [weak self] status in
+                    Task { @MainActor [weak self] in
+                        guard self?.selectedLocalTranscriptionModel == status.modelID else { return }
+                        self?.localModelStatus = status
+                    }
+                }
+                guard !Task.isCancelled else { return }
+                localModelStatus = status
+                workspaceNotice = "Le modèle \(selectedLocalTranscriptionModelDescriptor.displayName) est disponible hors ligne."
+            } catch is CancellationError {
+                await refreshLocalModelStatus()
+            } catch {
+                localModelStatus = .init(
+                    modelID: modelID,
+                    availability: .failed,
+                    errorMessage: error.localizedDescription
+                )
+                errorMessage = error.localizedDescription
+            }
+            isDownloadingTranscriptionModel = false
+            modelDownloadTask = nil
+        }
+    }
+
+    func cancelModelDownload() {
+        modelDownloadTask?.cancel()
+        modelDownloadTask = nil
+        isDownloadingTranscriptionModel = false
+    }
+
+    func startLocalTranscription() {
+        guard let course = currentCourse, canStartLocalTranscription else { return }
+        let segments = capturedSegments
+        let modelID = selectedLocalTranscriptionModel
+        isLocalTranscriptionRunning = true
+        localTranscriptionProgress = .init(
+            stage: .checkingModel,
+            fractionCompleted: 0,
+            totalSegmentCount: segments.count
+        )
+        localTranscriptionTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let stored = try await transcriptionCoordinator.transcribe(
+                    course: course,
+                    segments: segments,
+                    modelID: modelID
+                ) { [weak self] update in
+                    Task { @MainActor [weak self] in self?.localTranscriptionProgress = update }
+                }
+                guard !Task.isCancelled else { return }
+                lastLocalTranscriptionResult = stored.result
+                realTranscriptDraft = stored.draft
+                if !isDemoMode { transcriptDraft = stored.draft }
+                workspaceNotice = "Transcription brute terminée et enregistrée localement."
+            } catch is CancellationError {
+                localTranscriptionProgress.stage = .cancelled
+                localTranscriptionProgress.message = "Transcription annulée proprement."
+            } catch {
+                localTranscriptionProgress.stage = .failed
+                localTranscriptionProgress.message = error.localizedDescription
+                errorMessage = "La transcription locale a échoué : \(error.localizedDescription)"
+            }
+            isLocalTranscriptionRunning = false
+            localTranscriptionTask = nil
+        }
+    }
+
+    func cancelLocalTranscription() {
+        localTranscriptionTask?.cancel()
+        localTranscriptionProgress.stage = .cancelled
+        localTranscriptionProgress.message = "Annulation en cours…"
+    }
+
+    func openRawTranscriptInEditor() {
+        guard realTranscriptDraft != nil else { return }
+        if isDemoMode { deactivateDemonstrationMode() }
+        transcriptDraft = realTranscriptDraft
+        selectedSection = .transcript
     }
 
     func requestDocumentRegeneration() {
@@ -535,6 +690,7 @@ final class RecordingViewModel: ObservableObject {
     }
 
     func activateDemonstrationMode() {
+        if transcriptDraft?.isDemonstration == false { realTranscriptDraft = transcriptDraft }
         isDemoMode = true
         transcriptDraft = demonstrationFactory.transcript()
         privacyReview = nil
@@ -553,7 +709,7 @@ final class RecordingViewModel: ObservableObject {
             : nil
         isDemoMode = false
         if transcriptDraft?.isDemonstration == true {
-            transcriptDraft = nil
+            transcriptDraft = realTranscriptDraft
         }
         supportDocuments.removeAll(where: \.isDemonstration)
         privacyReview = nil
@@ -729,11 +885,11 @@ final class RecordingViewModel: ObservableObject {
 
     func stop() {
         do {
-            _ = try recorder.stop()
+            capturedSegments = try recorder.stop().sorted { $0.sequence < $1.sequence }
             updateSnapshot()
             stopPolling()
             endSystemActivity()
-            selectedSection = .segments
+            selectedSection = .localTranscription
             let capturedCourse = currentCourse
             Task {
                 await queueCoordinator.recordingDidStop()
@@ -794,6 +950,9 @@ final class RecordingViewModel: ObservableObject {
                 throw error
             }
             currentCourse = course
+            capturedSegments = []
+            localTranscriptionProgress = .init(stage: .idle)
+            lastLocalTranscriptionResult = nil
             updateSnapshot()
             beginSystemActivity()
             startPolling()
@@ -883,6 +1042,24 @@ final class RecordingViewModel: ObservableObject {
         guard let systemActivity else { return }
         ProcessInfo.processInfo.endActivity(systemActivity)
         self.systemActivity = nil
+    }
+
+    private func restoreLatestLocalTranscription() async {
+        do {
+            guard let stored = try await transcriptionCoordinator.latestTranscription() else { return }
+            currentCourse = stored.course
+            capturedSegments = stored.recordingSegments
+            lastLocalTranscriptionResult = stored.result
+            realTranscriptDraft = stored.draft
+            if !isDemoMode { transcriptDraft = stored.draft }
+            snapshot = AudioRecorderSnapshot(
+                state: .finished,
+                elapsed: stored.recordingSegments.reduce(0) { $0 + $1.duration },
+                segments: stored.recordingSegments
+            )
+        } catch {
+            errorMessage = "La dernière transcription locale n’a pas pu être restaurée : \(error.localizedDescription)"
+        }
     }
 
     private func refreshAIState() async {

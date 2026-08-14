@@ -19,6 +19,11 @@ Intégration Swift native et modèles Core ML, distribuée sous licence MIT. C'e
 le candidat principal pour une application autonome et une utilisation possible
 de l'Apple Neural Engine.
 
+État alpha.2 : adaptateur réel intégré avec Argmax OSS / WhisperKit 1.0.0 épinglé
+au commit `25c62997041c134b03ca82731ce2f6fd2cae1eb9`. Tiny multilingue sert aux
+smoke tests ; Small multilingue au premier benchmark français. Ce jalon est une
+expérience et non la décision finale du moteur.
+
 Source : <https://github.com/argmaxinc/argmax-oss-swift>
 
 ### 2. whisper.cpp / Core ML + Metal
@@ -85,6 +90,14 @@ Le cœur Swift calcule déjà :
 - erreur moyenne des horodatages ;
 - facteur temps réel à partir de la durée audio et du temps de traitement.
 
+L’adaptateur alpha.2 ajoute l’identifiant et la version du moteur, le modèle, la
+durée de traitement murale, la taille installée, un échantillonnage du pic de
+mémoire résidente, les états thermiques initial/maximal et les informations de
+machine (modèle matériel, mémoire physique, macOS, architecture). Le rapport JSON
+est encodé avec clés triées et dates ISO 8601. Une métrique absente reste `null` :
+les profils détaillés et la consommation énergétique doivent être relevés avec
+Instruments et ne sont jamais estimés par Scrib.
+
 Sur le Mac, chaque exécution ajoute : pic de mémoire résidente, taille du modèle,
 état thermique initial et maximal, comportement après pause/reprise, et
 observation de la réactivité de Word. Instruments servira aux profils détaillés,
@@ -96,10 +109,12 @@ conformément à la documentation Apple :
 1. Brancher le Mac au secteur et fermer les tâches non nécessaires.
 2. Démarrer Word avec un document de cours de 30 pages.
 3. Laisser la température revenir à l'état nominal.
-4. Transcrire le même WAV avec lot 1 et paramètres figés.
+4. Dans **Transcription locale expérimentale**, télécharger volontairement le
+   modèle puis transcrire le même fichier avec lot 1, français et paramètres figés.
 5. Relever métriques automatiques et réactivité Word.
 6. Répéter trois fois ; conserver la médiane et le pire pic mémoire.
-7. Tester ensuite quatre heures audio assemblées avec checkpoints.
+7. Pour alpha.2, tester d’abord 1 minute puis 10 à 30 minutes. Le test de quatre
+   heures avec checkpoints reste un jalon ultérieur.
 8. Forcer une interruption, relancer Scrib et vérifier la reprise sans doublon.
 
 ## Seuils de décision V1
