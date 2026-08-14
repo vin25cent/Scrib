@@ -61,11 +61,14 @@ Windows fourni avec Swift et le toolchain installé dans le profil utilisateur.
 ### Intégration continue macOS
 
 Le workflow `.github/workflows/macos.yml` utilise le runner Apple Silicon
-`macos-26` avec Xcode 26.5 épinglé pour compiler la cible `ScribApp` et exécuter tous les tests après
+`macos-15` avec Xcode 16.4 épinglé pour compiler la cible `ScribApp` et exécuter tous les tests après
 chaque envoi sur `main` et pour chaque pull request. Il publie également pendant
 14 jours `Scrib-macOS-unsigned`, une archive autonome non signée accompagnée de
 son empreinte SHA-256. Cette archive sert aux essais ; macOS demandera une
 autorisation manuelle et elle n'est ni notarée ni prête à distribuer au public.
+Le cœur reste validé sous Swift 6 ; la cible SwiftUI utilise temporairement le
+mode de langage Swift 5 pour contourner une régression IRGen de Swift 6.3.2
+observée avec Xcode 26.5.
 
 ### Audios publics de démonstration
 

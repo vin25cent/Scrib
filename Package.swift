@@ -54,6 +54,9 @@ targets.append(
             "ScribDomain",
             "ScribApplication",
             "ScribInfrastructure"
+        ],
+        swiftSettings: [
+            .swiftLanguageMode(.v5)
         ]
     )
 )
