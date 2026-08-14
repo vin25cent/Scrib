@@ -24,7 +24,15 @@ jobs:
         run: swift --version
 
       - name: Build the macOS application target
-        run: swift build --product ScribApp
+        run: |
+          set -o pipefail
+          if ! swift build --product ScribApp 2>&1 | tee swift-build.log; then
+            grep -E '(^|: )error:' swift-build.log | tail -20 | while IFS= read -r line; do
+              escaped="${line//'%'/'%25'}"
+              echo "::error::$escaped"
+            done
+            exit 1
+          fi
 
       - name: Run all tests
         run: swift test
