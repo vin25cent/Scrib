@@ -3,7 +3,7 @@ import Darwin
 import Foundation
 import ScribApplication
 import ScribDomain
-import WhisperKit
+@preconcurrency import WhisperKit
 
 public enum WhisperKitTranscriptionError: LocalizedError, Sendable {
     case modelNotInstalled(LocalTranscriptionModelID)
