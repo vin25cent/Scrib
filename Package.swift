@@ -13,7 +13,7 @@ var targets: [Target] = [
         name: "ScribDomain",
         swiftSettings: [
             .unsafeFlags(
-                ["-no-emit-module-separately"],
+                ["-whole-module-optimization"],
                 .when(platforms: [.macOS])
             )
         ]
