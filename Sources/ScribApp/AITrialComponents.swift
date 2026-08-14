@@ -2,136 +2,7 @@ import ScribApplication
 import ScribDomain
 import SwiftUI
 
-struct TeacherSettingsView: View {
-    @ObservedObject var model: RecordingViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ScribPageHeader(
-                title: "Réglages",
-                subtitle: "Configurez l’IA, le budget d’essai et les autorisations d’enregistrement.",
-                icon: "gearshape.fill"
-            )
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    AITrialSettingsCard(model: model)
-                    TeacherPermissionsSettingsCard(model: model)
-                }
-                .padding(.horizontal, 32)
-                .padding(.bottom, 32)
-                .frame(maxWidth: 980)
-            }
-        }
-        .background(ScribDesign.canvas)
-        .navigationTitle("Réglages")
-        .overlay(alignment: .bottomTrailing) { WorkspaceNotice(model: model) }
-    }
-}
-
-private struct AITrialSettingsCard: View {
-    @ObservedObject var model: RecordingViewModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ScribSectionHeading(
-                "Intelligence artificielle",
-                subtitle: "Simulation gratuite ou essais réels strictement plafonnés.",
-                icon: "sparkles"
-            )
-            modelPicker
-            trialMetrics
-            budgetField
-            if model.selectedAIModelProfile.isLive {
-                Divider()
-                APIKeySettings(model: model)
-            }
-            Divider()
-            trialAction
-            if let run = model.aiLastRun {
-                LastTrialSummary(model: model, run: run)
-            }
-            if !model.aiGenerationRuns.isEmpty {
-                Divider()
-                TrialComparisonList(model: model)
-            }
-        }
-        .scribCard()
-    }
-
-    private var modelPicker: some View {
-        Picker(
-            "Modèle",
-            selection: Binding(
-                get: { model.aiPreferences.selectedModelProfileID },
-                set: model.selectAIModel
-            )
-        ) {
-            ForEach(model.aiModelProfiles) { profile in
-                Text(profile.displayName).tag(profile.id)
-            }
-        }
-    }
-
-    private var trialMetrics: some View {
-        HStack(spacing: 14) {
-            TrialMetric(title: "Dépensé", value: model.formatUSDCost(model.aiSpentUSD), icon: "dollarsign.circle")
-            TrialMetric(title: "Reste", value: model.formatUSDCost(model.aiBudgetRemainingUSD), icon: "gauge.with.dots.needle.33percent")
-            TrialMetric(title: "Essais", value: "\(model.aiGenerationRuns.count)", icon: "checklist")
-        }
-    }
-
-    private var budgetField: some View {
-        HStack {
-            Text("Plafond total des essais (USD)")
-            Spacer()
-            TextField(
-                "10",
-                value: Binding(
-                    get: { model.aiPreferences.trialBudgetUSD },
-                    set: model.setAITrialBudget
-                ),
-                format: .number.precision(.fractionLength(0...2))
-            )
-            .textFieldStyle(.roundedBorder)
-            .multilineTextAlignment(.trailing)
-            .frame(width: 100)
-        }
-    }
-
-    private var trialAction: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Banc d’essai sur données fictives").font(.headline)
-                Text(trialStatus).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if model.isAIGenerationRunning {
-                ProgressView().controlSize(.small)
-            } else if !model.isDemoMode {
-                Button("Charger la démonstration") { model.runAIModelTrial() }
-                    .buttonStyle(.bordered)
-            } else if !model.isPrivacyApproved {
-                Button("Vérifier la confidentialité") { model.selectedSection = .privacy }
-                    .buttonStyle(.bordered)
-            } else {
-                Button("Tester ce modèle") { model.runAIModelTrial() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!model.aiCanRunTrial)
-            }
-        }
-    }
-
-    private var trialStatus: String {
-        if !model.isDemoMode { return "Charge d’abord le jeu fictif hors ligne." }
-        if !model.isPrivacyApproved { return "La revue locale doit être approuvée avant tout adaptateur." }
-        if model.selectedAIModelProfile.isLive && !model.aiHasStoredKey { return "Ajoute une clé API pour ce fournisseur." }
-        if model.selectedAIModelProfile.isLive && !model.aiPreferences.liveRequestsEnabled { return "Active explicitement les appels payants." }
-        return "Prêt : le JSON sera validé avant tout rendu Word."
-    }
-}
-
-#if false // Components are compiled separately in AITrialComponents.swift.
-private struct APIKeySettings: View {
+struct APIKeySettings: View {
     @ObservedObject var model: RecordingViewModel
 
     var body: some View {
@@ -170,7 +41,7 @@ private struct APIKeySettings: View {
     }
 }
 
-private struct TrialMetric: View {
+struct TrialMetric: View {
     let title: String
     let value: String
     let icon: String
@@ -189,7 +60,7 @@ private struct TrialMetric: View {
     }
 }
 
-private struct LastTrialSummary: View {
+struct LastTrialSummary: View {
     @ObservedObject var model: RecordingViewModel
     let run: AIGenerationRun
 
@@ -209,7 +80,7 @@ private struct LastTrialSummary: View {
     }
 }
 
-private struct TrialComparisonList: View {
+struct TrialComparisonList: View {
     @ObservedObject var model: RecordingViewModel
 
     var body: some View {
@@ -238,7 +109,7 @@ private struct TrialComparisonList: View {
     }
 }
 
-private struct TeacherPermissionsSettingsCard: View {
+struct TeacherPermissionsSettingsCard: View {
     @ObservedObject var model: RecordingViewModel
 
     var body: some View {
@@ -277,4 +148,3 @@ private struct TeacherPermissionsSettingsCard: View {
         .scribCard()
     }
 }
-#endif
