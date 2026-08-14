@@ -125,6 +125,7 @@ struct SimpleZIPArchiveReader {
 
     private static func inflate(_ source: Data, expectedSize: Int) throws -> Data {
         if expectedSize == 0 { return Data() }
+        guard !source.isEmpty else { throw Error.invalidArchive }
         var output = Data(count: expectedSize + 1)
         let placeholder = UnsafeMutablePointer<UInt8>.allocate(capacity: 1)
         defer { placeholder.deallocate() }
@@ -141,11 +142,17 @@ struct SimpleZIPArchiveReader {
         }
         defer { compression_stream_destroy(&stream) }
 
-        let status = source.withUnsafeBytes { sourceBuffer in
-            output.withUnsafeMutableBytes { outputBuffer in
-                stream.src_ptr = sourceBuffer.bindMemory(to: UInt8.self).baseAddress
+        let status = try source.withUnsafeBytes { sourceBuffer in
+            guard let sourceAddress = sourceBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                throw Error.invalidArchive
+            }
+            return try output.withUnsafeMutableBytes { outputBuffer in
+                guard let outputAddress = outputBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                    throw Error.invalidArchive
+                }
+                stream.src_ptr = sourceAddress
                 stream.src_size = source.count
-                stream.dst_ptr = outputBuffer.bindMemory(to: UInt8.self).baseAddress
+                stream.dst_ptr = outputAddress
                 stream.dst_size = output.count
                 return compression_stream_process(&stream, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
             }
