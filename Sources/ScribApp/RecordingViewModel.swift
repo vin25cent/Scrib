@@ -66,6 +66,12 @@ final class RecordingViewModel: ObservableObject {
     @Published private(set) var selectedDemoAudioURL: URL?
     @Published private(set) var demonstrationPipelineResult: DemonstrationPipelineResult?
     @Published private(set) var isDemonstrationPipelineRunning = false
+    @Published private(set) var aiPreferences: AIGenerationPreferences
+    @Published var aiAPIKeyDraft = ""
+    @Published private(set) var aiHasStoredKey = false
+    @Published private(set) var aiGenerationRuns: [AIGenerationRun] = []
+    @Published private(set) var aiLastRun: AIGenerationRun?
+    @Published private(set) var isAIGenerationRunning = false
     @Published var workspaceNotice: String?
     @Published private(set) var systemConditions = SystemConditionSnapshot(
         isOnExternalPower: false,
@@ -82,6 +88,9 @@ final class RecordingViewModel: ObservableObject {
     private let queueCoordinator: ProcessingQueueCoordinator
     private let demonstrationPipeline: any DemonstrationPipelineRunning
     private let supportImporter: any SupportDocumentImporting
+    private let aiOrchestrator: StructuredGenerationOrchestrator
+    private let aiSecretStore: any AISecretStoring
+    private let aiPreferencesStore: any AIGenerationPreferencesStoring
     private let readinessValidator = RecordingReadinessValidator()
     private let trackingPresenter = CourseTrackingPresenter()
     private let transcriptService = TranscriptWorkspaceService()
@@ -101,6 +110,9 @@ final class RecordingViewModel: ObservableObject {
         queueCoordinator: ProcessingQueueCoordinator,
         demonstrationPipeline: any DemonstrationPipelineRunning,
         supportImporter: any SupportDocumentImporting,
+        aiOrchestrator: StructuredGenerationOrchestrator,
+        aiSecretStore: any AISecretStoring,
+        aiPreferencesStore: any AIGenerationPreferencesStoring,
         startupWarning: String? = nil
     ) {
         self.recorder = recorder
@@ -109,9 +121,18 @@ final class RecordingViewModel: ObservableObject {
         self.queueCoordinator = queueCoordinator
         self.demonstrationPipeline = demonstrationPipeline
         self.supportImporter = supportImporter
+        self.aiOrchestrator = aiOrchestrator
+        self.aiSecretStore = aiSecretStore
+        self.aiPreferencesStore = aiPreferencesStore
+        var loadedAIPreferences = aiPreferencesStore.load()
+        if AIModelCatalog.profile(id: loadedAIPreferences.selectedModelProfileID) == nil {
+            loadedAIPreferences.selectedModelProfileID = AIModelCatalog.profiles[0].id
+        }
+        self.aiPreferences = loadedAIPreferences
         self.savedTeachers = teacherStore.teachers()
         self.supportDocuments = supportImporter.documents()
         self.errorMessage = startupWarning
+        Task { await refreshAIState() }
     }
 
     var teachingUnits: [TeachingUnit] {
@@ -180,6 +201,29 @@ final class RecordingViewModel: ObservableObject {
         }
     }
 
+    var aiModelProfiles: [AIModelProfile] { AIModelCatalog.profiles }
+
+    var selectedAIModelProfile: AIModelProfile {
+        AIModelCatalog.profile(id: aiPreferences.selectedModelProfileID)
+            ?? AIModelCatalog.profiles[0]
+    }
+
+    var aiSpentUSD: Double {
+        aiGenerationRuns.filter { !$0.usage.isSimulated }
+            .map(\.usage.estimatedCostUSD)
+            .reduce(0, +)
+    }
+
+    var aiBudgetRemainingUSD: Double {
+        max(aiPreferences.trialBudgetUSD - aiSpentUSD, 0)
+    }
+
+    var aiCanRunTrial: Bool {
+        isDemoMode && isPrivacyApproved && !isAIGenerationRunning
+            && (!selectedAIModelProfile.isLive
+                || (aiPreferences.liveRequestsEnabled && aiHasStoredKey))
+    }
+
     private var privacyContent: String {
         let transcript = transcriptDraft?.plainText ?? ""
         let supports = supportDocuments.compactMap(\.extraction?.plainText)
@@ -233,6 +277,116 @@ final class RecordingViewModel: ObservableObject {
 
     func requestDocumentRegeneration() {
         workspaceNotice = "La correction est prête. La régénération sera ajoutée à la file sans retranscrire l’audio."
+    }
+
+    func selectAIModel(_ id: String) {
+        guard AIModelCatalog.profile(id: id) != nil else { return }
+        aiPreferences.selectedModelProfileID = id
+        persistAIPreferences()
+        aiAPIKeyDraft = ""
+        Task { await refreshAIKeyStatus() }
+    }
+
+    func setAITrialBudget(_ value: Double) {
+        aiPreferences.trialBudgetUSD = min(max(value, 0), 100)
+        persistAIPreferences()
+    }
+
+    func setAILiveRequestsEnabled(_ enabled: Bool) {
+        aiPreferences.liveRequestsEnabled = enabled
+        persistAIPreferences()
+    }
+
+    func saveAIAPIKey() {
+        let key = aiAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard selectedAIModelProfile.isLive else { return }
+        guard key.count >= 20 else {
+            errorMessage = "La clé API semble incomplète."
+            return
+        }
+        let provider = selectedAIModelProfile.provider
+        Task { @MainActor in
+            do {
+                try await aiSecretStore.saveSecret(key, for: provider)
+                aiAPIKeyDraft = ""
+                aiHasStoredKey = true
+                workspaceNotice = "Clé enregistrée dans le Trousseau macOS. Aucun appel n’a été effectué."
+            } catch {
+                errorMessage = "La clé n’a pas pu être enregistrée : \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func deleteAIAPIKey() {
+        let provider = selectedAIModelProfile.provider
+        guard provider != .simulated else { return }
+        Task { @MainActor in
+            do {
+                try await aiSecretStore.deleteSecret(for: provider)
+                aiHasStoredKey = false
+                aiAPIKeyDraft = ""
+                aiPreferences.liveRequestsEnabled = false
+                persistAIPreferences()
+                workspaceNotice = "La clé API a été supprimée du Trousseau."
+            } catch {
+                errorMessage = "La clé n’a pas pu être supprimée : \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func runAIModelTrial() {
+        guard !isAIGenerationRunning else { return }
+        guard let transcriptDraft, transcriptDraft.isDemonstration else {
+            activateDemonstrationMode()
+            workspaceNotice = "Données fictives chargées. Vérifiez maintenant la confidentialité avant l’essai."
+            selectedSection = .privacy
+            return
+        }
+        guard isPrivacyApproved else {
+            workspaceNotice = "L’essai attend la validation de confidentialité de cette version."
+            selectedSection = .privacy
+            return
+        }
+        let teacher = Teacher(
+            name: "Enseignant Démo",
+            recordingAuthorizationConfirmedAt: Date()
+        )
+        let unit = TeachingUnitCatalog.units(for: .semester1).first { $0.code == "2.11" }!
+        let course = Course(
+            id: transcriptDraft.courseID,
+            semester: .semester1,
+            teachingUnit: unit,
+            title: transcriptDraft.courseTitle,
+            teacher: teacher,
+            expectedDuration: .oneHour
+        )
+        let request = AIGenerationRequest(
+            course: course,
+            transcript: transcriptDraft,
+            supportExtractions: supportDocuments.compactMap(\.extraction),
+            privacyReview: privacyReview,
+            modelProfile: selectedAIModelProfile,
+            preferences: aiPreferences
+        )
+        isAIGenerationRunning = true
+        workspaceNotice = selectedAIModelProfile.isLive
+            ? "Essai API en cours…"
+            : "Simulation structurée en cours…"
+        Task { @MainActor in
+            defer { isAIGenerationRunning = false }
+            do {
+                let run = try await aiOrchestrator.run(request)
+                aiLastRun = run
+                aiGenerationRuns = try await aiOrchestrator.runs()
+                workspaceNotice = "Essai validé : deux documents structurés, coût estimé \(formatUSDCost(run.usage.estimatedCostUSD))."
+            } catch {
+                errorMessage = "L’essai IA a échoué : \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func formatUSDCost(_ value: Double) -> String {
+        value.formatted(.currency(code: "USD").precision(.fractionLength(0...4)))
     }
 
     func jumpToAudio(at seconds: TimeInterval) {
@@ -729,6 +883,38 @@ final class RecordingViewModel: ObservableObject {
         guard let systemActivity else { return }
         ProcessInfo.processInfo.endActivity(systemActivity)
         self.systemActivity = nil
+    }
+
+    private func refreshAIState() async {
+        do {
+            aiGenerationRuns = try await aiOrchestrator.runs()
+            aiLastRun = aiGenerationRuns.first
+            await refreshAIKeyStatus()
+        } catch {
+            errorMessage = "Les réglages IA n’ont pas pu être chargés : \(error.localizedDescription)"
+        }
+    }
+
+    private func refreshAIKeyStatus() async {
+        let provider = selectedAIModelProfile.provider
+        guard provider != .simulated else {
+            aiHasStoredKey = false
+            return
+        }
+        do {
+            aiHasStoredKey = try await aiSecretStore.hasSecret(for: provider)
+        } catch {
+            aiHasStoredKey = false
+            errorMessage = "Le Trousseau macOS n’a pas pu être consulté : \(error.localizedDescription)"
+        }
+    }
+
+    private func persistAIPreferences() {
+        do {
+            try aiPreferencesStore.save(aiPreferences)
+        } catch {
+            errorMessage = "Les réglages IA n’ont pas pu être enregistrés : \(error.localizedDescription)"
+        }
     }
 
     private func message(for issue: RecordingReadinessIssue) -> String {

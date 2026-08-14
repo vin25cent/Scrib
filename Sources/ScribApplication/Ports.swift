@@ -40,6 +40,32 @@ public protocol SupportDocumentExtracting: Sendable {
     func extract(documentID: UUID, fileName: String, kind: SupportDocumentKind, from url: URL) throws -> SupportDocumentExtraction
 }
 
+public protocol AICloudGenerating: Sendable {
+    func generate(
+        _ request: AIProviderGenerationRequest,
+        credential: String?
+    ) async throws -> AIProviderGenerationResponse
+}
+
+public protocol AISecretStoring: Sendable {
+    func hasSecret(for provider: AIProviderID) async throws -> Bool
+    func readSecret(for provider: AIProviderID) async throws -> String?
+    func saveSecret(_ secret: String, for provider: AIProviderID) async throws
+    func deleteSecret(for provider: AIProviderID) async throws
+}
+
+public protocol AIGenerationRunStoring: Sendable {
+    func runs() async throws -> [AIGenerationRun]
+    func run(idempotencyKey: String) async throws -> AIGenerationRun?
+    func save(_ run: AIGenerationRun) async throws
+}
+
+@MainActor
+public protocol AIGenerationPreferencesStoring: AnyObject {
+    func load() -> AIGenerationPreferences
+    func save(_ preferences: AIGenerationPreferences) throws
+}
+
 public protocol TranscriptionEngine: Sendable {
     func transcribe(courseID: CourseID) async throws -> String
 }

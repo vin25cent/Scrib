@@ -227,7 +227,11 @@ pas silencieusement vers un autre fournisseur.
 
 - L'API est choisie d'abord sur la qualité après comparaison plafonnée à 10 €.
 - Le meilleur modèle retenu est utilisé pour tous les cours.
-- L'interface affiche le cumul mensuel estimé, sans plafond bloquant en V1.
+- Le banc d’essai applique un plafond total bloquant. Son plafond opérationnel
+  par défaut est de 8 USD afin de conserver une marge sous l’enveloppe de 10 € ;
+  taux de change et taxes sont revérifiés avant le premier appel réel.
+- Après sélection du modèle, l’interface de production affichera le cumul mensuel
+  estimé sans substitution automatique de fournisseur.
 - Les clés sont stockées dans le Trousseau macOS et jamais dans le dépôt.
 - La protection locale repose sur la session macOS ; FileVault reste fortement
   recommandé mais n'est pas imposé par Scrib.

@@ -214,6 +214,20 @@ Les appels réseau sont rejouables avec une clé d'idempotence. Les délais util
 une reprise exponentielle avec dispersion, mais aucun fournisseur secondaire
 n'est sélectionné sans action explicite.
 
+`StructuredGenerationOrchestrator` applique cet ordre : empreinte et barrière de
+confidentialité, contrôle d’idempotence, projection budgétaire, lecture de la clé,
+appel de l’adaptateur choisi, validation locale du JSON, conversion documentaire
+et persistance du résultat avec son usage. Un résultat déjà enregistré est
+retourné sans nouvel appel. Les erreurs temporaires sont retentées deux fois ; un
+changement de fournisseur reste toujours explicite.
+
+Le premier adaptateur réel utilise `https://api.openai.com/v1/responses`, demande
+une sortie JSON Schema stricte et désactive la conservation de la réponse côté
+requête (`store: false`). Les profils OpenAI sont un catalogue de benchmark, pas
+un choix définitif. Leur tarification est datée et doit être revérifiée avant la
+campagne d’essais. Le simulateur local passe par le même orchestrateur et le même
+validateur, avec un coût nul.
+
 ## 10. Rendu DOCX
 
 `OOXMLDocumentRenderer` reçoit un modèle interne validé et construit localement un
@@ -261,6 +275,8 @@ supports.
 ## 12. Sécurité
 
 - clés API dans le Trousseau ;
+- secrets non synchronisables, accessibles uniquement lorsque la session est
+  déverrouillée et jamais recopiés dans `UserDefaults` ;
 - App Sandbox et droits minimums : microphone, notifications, fichiers choisis et
   conteneur iCloud ;
 - transport TLS, domaines explicitement autorisés ;

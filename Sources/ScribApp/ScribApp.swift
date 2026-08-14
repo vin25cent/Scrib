@@ -19,6 +19,9 @@ struct ScribDesktopApp: App {
                 queueCoordinator: environment.queueCoordinator,
                 demonstrationPipeline: environment.demonstrationPipeline,
                 supportImporter: environment.supportImporter,
+                aiOrchestrator: environment.aiOrchestrator,
+                aiSecretStore: environment.aiSecretStore,
+                aiPreferencesStore: environment.aiPreferencesStore,
                 startupWarning: environment.persistenceWarning
             )
         )

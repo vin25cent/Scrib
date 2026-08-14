@@ -27,7 +27,8 @@ var targets: [Target] = [
         ],
         linkerSettings: [
             .linkedFramework("IOKit", .when(platforms: [.macOS])),
-            .linkedFramework("PDFKit", .when(platforms: [.macOS]))
+            .linkedFramework("PDFKit", .when(platforms: [.macOS])),
+            .linkedFramework("Security", .when(platforms: [.macOS]))
         ]
     ),
     .executableTarget(

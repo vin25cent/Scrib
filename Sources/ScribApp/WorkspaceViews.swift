@@ -788,7 +788,7 @@ private struct WorkspaceEmptyState: View {
     }
 }
 
-private struct WorkspaceNotice: View {
+struct WorkspaceNotice: View {
     @ObservedObject var model: RecordingViewModel
 
     var body: some View {

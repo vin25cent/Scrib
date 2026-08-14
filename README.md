@@ -6,7 +6,8 @@ Word : un cours structuré fidèle et une fiche de révision.
 
 Le dépôt contient la spécification, l'architecture et les prototypes Swift de
 l'enregistrement, de la file persistante, des métriques de transcription et du
-rendu DOCX. Aucun moteur ML ni fournisseur cloud n'est encore branché.
+rendu DOCX. Le moteur de transcription reste à choisir ; l’adaptateur OpenAI est
+préparé mais tous les appels payants sont désactivés par défaut.
 
 ## Documents de référence
 
@@ -19,6 +20,7 @@ rendu DOCX. Aucun moteur ML ni fournisseur cloud n'est encore branché.
 - [Format DOCX déterministe](docs/FORMAT_DOCX.md)
 - [Contrat JSON de génération](docs/STRUCTURED_GENERATION.md)
 - [Barrière locale de confidentialité](docs/PRIVACY_GATE.md)
+- [Génération IA et banc d’essai](docs/AI_GENERATION.md)
 
 ## Structure
 
@@ -41,8 +43,8 @@ compilée ; les outils de développement pourront rester sur une machine de buil
 ou un service d'intégration continue.
 
 Dans Xcode, ouvrir `Package.swift`, choisir le schéma `ScribApp`, puis lancer la
-cible « My Mac ». Le squelette ne contient volontairement aucune dépendance
-externe ni clé d'API.
+cible « My Mac ». Le dépôt ne contient aucune clé API. Les dépendances Swift sont
+épinglées dans `Package.resolved`.
 
 ### Tests du cœur sur Windows
 
@@ -108,8 +110,13 @@ téléchargent localement avec contrôle SHA-256 :
 - premier renderer DOCX déterministe en Swift pur et deux documents témoins
   fictifs, désormais en A4 avec sommaire, tableaux, figures et liens audio ;
 - contrat JSON `1.0` validé localement et filtre patient bloquant avant le cloud ;
+- orchestrateur IA avec simulation gratuite, adaptateur OpenAI Responses,
+  sorties structurées strictes, idempotence, reprises bornées et validation
+  locale avant rendu ;
+- clé API conservée dans le Trousseau macOS, appels payants désactivés par défaut,
+  plafond total bloquant et historique comparatif coût/jetons/durée ;
 - adaptateurs simulés permettant de tester le benchmark sans modèle ni audio ;
-- aucun modèle ML ni fournisseur cloud branché.
+- aucun moteur ML de transcription branché et aucun appel API exécuté en CI.
 
 ## Confidentialité du dépôt
 

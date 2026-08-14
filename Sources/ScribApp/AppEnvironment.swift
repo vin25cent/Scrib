@@ -6,6 +6,9 @@ struct AppEnvironment {
     let queueCoordinator: ProcessingQueueCoordinator
     let demonstrationPipeline: any DemonstrationPipelineRunning
     let supportImporter: any SupportDocumentImporting
+    let aiOrchestrator: StructuredGenerationOrchestrator
+    let aiSecretStore: any AISecretStoring
+    let aiPreferencesStore: any AIGenerationPreferencesStoring
     let persistenceWarning: String?
 
     static func live() -> AppEnvironment {
@@ -35,10 +38,31 @@ struct AppEnvironment {
             notifications: notifications
         )
 
+        let aiSecretStore: any AISecretStoring = MacKeychainSecretStore()
+        let aiRunStore: any AIGenerationRunStoring
+        do {
+            aiRunStore = try LocalAIGenerationRunStore()
+        } catch {
+            aiRunStore = InMemoryAIGenerationRunStore()
+            warnings.append("L’historique des essais IA sera temporaire : \(error.localizedDescription)")
+        }
+        let aiOrchestrator = StructuredGenerationOrchestrator(
+            adapters: [
+                .simulated: SimulatedCloudGenerationAdapter(),
+                .openAI: OpenAIResponsesAdapter()
+            ],
+            secretStore: aiSecretStore,
+            runStore: aiRunStore
+        )
+        let aiPreferencesStore = UserDefaultsAIGenerationPreferencesStore()
+
         return AppEnvironment(
             queueCoordinator: coordinator,
             demonstrationPipeline: LocalDemonstrationPipeline(repository: repository),
             supportImporter: supportImporter,
+            aiOrchestrator: aiOrchestrator,
+            aiSecretStore: aiSecretStore,
+            aiPreferencesStore: aiPreferencesStore,
             persistenceWarning: warnings.isEmpty ? nil : warnings.joined(separator: "\n")
         )
     }

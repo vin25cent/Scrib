@@ -77,10 +77,13 @@ réinitialise.
 Jalon : cours et fiche s'ouvrant correctement dans Word, avec fidélité évaluée sur
 un jeu de référence.
 
-État anticipé : modèle documentaire structuré et renderer OOXML déterministe
+État : modèle documentaire structuré et renderer OOXML déterministe
 implémentés, avec deux documents témoins fictifs, sommaire, tableaux, figures et
-liens audio. Le schéma JSON cloud est validé localement ; la comparaison réelle
-des fournisseurs et la recette visuelle finale sur Word macOS restent à réaliser.
+liens audio. Le schéma JSON cloud est validé localement. L’orchestrateur propose
+une simulation gratuite et un adaptateur OpenAI Responses désactivé par défaut,
+avec clé dans le Trousseau, plafond total bloquant, idempotence, reprises,
+comptage des jetons et historique comparatif. Les essais réels des modèles et la
+recette visuelle finale sur Word macOS restent à réaliser avec l’utilisateur.
 
 ## Phase 5 — Supports et vérification scientifique
 
