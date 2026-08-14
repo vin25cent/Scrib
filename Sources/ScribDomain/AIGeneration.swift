@@ -158,16 +158,20 @@ public struct AIGenerationRun: Identifiable, Codable, Sendable {
     }
 
     public var sectionCount: Int {
-        documents.reduce(into: 0) { total, document in
+        var total = 0
+        for document in documents {
             total += document.sections.count
         }
+        return total
     }
 
     public var blockCount: Int {
-        documents.reduce(into: 0) { total, document in
-            total += document.sections.reduce(into: 0) { sectionTotal, section in
-                sectionTotal += section.blocks.count
+        var total = 0
+        for document in documents {
+            for section in document.sections {
+                total += section.blocks.count
             }
         }
+        return total
     }
 }
