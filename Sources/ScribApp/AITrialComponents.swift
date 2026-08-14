@@ -2,6 +2,7 @@ import ScribApplication
 import ScribDomain
 import SwiftUI
 
+#if false // Each component is compiled in its own file to avoid an Xcode 26 IRGen crash.
 struct APIKeySettings: View {
     @ObservedObject var model: RecordingViewModel
 
@@ -40,7 +41,9 @@ struct APIKeySettings: View {
         }
     }
 }
+#endif
 
+#if false // Remaining components are compiled in dedicated files below this migration point.
 struct TrialMetric: View {
     let title: String
     let value: String
@@ -148,3 +151,4 @@ struct TeacherPermissionsSettingsCard: View {
         .scribCard()
     }
 }
+#endif
