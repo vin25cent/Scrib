@@ -21,6 +21,7 @@ préparé mais tous les appels payants sont désactivés par défaut.
 - [Contrat JSON de génération](docs/STRUCTURED_GENERATION.md)
 - [Barrière locale de confidentialité](docs/PRIVACY_GATE.md)
 - [Génération IA et banc d’essai](docs/AI_GENERATION.md)
+- [Installer la première alpha sur macOS](docs/INSTALLATION_ALPHA_MACOS.md)
 
 ## Structure
 
@@ -63,9 +64,10 @@ Windows fourni avec Swift et le toolchain installé dans le profil utilisateur.
 Le workflow `.github/workflows/macos.yml` utilise le runner Apple Silicon
 `macos-15` avec Xcode 16.4 épinglé pour compiler la cible `ScribApp` et exécuter tous les tests après
 chaque envoi sur `main` et pour chaque pull request. Il publie également pendant
-14 jours `Scrib-macOS-unsigned`, une archive autonome non signée accompagnée de
-son empreinte SHA-256. Cette archive sert aux essais ; macOS demandera une
-autorisation manuelle et elle n'est ni notarée ni prête à distribuer au public.
+14 jours l’archive de l’alpha, également publiée dans GitHub Releases avec son
+empreinte SHA-256. L’application porte une signature ad hoc vérifiée pendant le
+build ; elle n’est pas notarée et macOS demandera donc une autorisation manuelle
+au premier lancement.
 
 ### Audios publics de démonstration
 

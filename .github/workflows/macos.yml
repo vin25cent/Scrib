@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-and-test:
@@ -51,15 +51,31 @@ jobs:
       - name: Run all tests
         run: swift test --jobs 1 -Xswiftc -disable-batch-mode
 
-      - name: Package the unsigned application
-        run: bash Scripts/Package-MacApp.sh release artifacts
+      - name: Package the ad hoc signed alpha
+        run: bash Scripts/Package-MacApp.sh release artifacts Scrib-0.1.0-alpha.1-macOS
 
-      - name: Upload the unsigned application
+      - name: Upload the alpha archive
         uses: actions/upload-artifact@v4
         with:
-          name: Scrib-macOS-unsigned
+          name: Scrib-0.1.0-alpha.1-macOS
           path: |
-            artifacts/Scrib-unsigned.zip
-            artifacts/Scrib-unsigned.zip.sha256
+            artifacts/Scrib-0.1.0-alpha.1-macOS.zip
+            artifacts/Scrib-0.1.0-alpha.1-macOS.zip.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish the first alpha release
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          startsWith(github.event.head_commit.message, 'Release Scrib 0.1.0-alpha.1')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.1.0-alpha.1 \
+            artifacts/Scrib-0.1.0-alpha.1-macOS.zip \
+            artifacts/Scrib-0.1.0-alpha.1-macOS.zip.sha256 \
+            --target "$GITHUB_SHA" \
+            --title "Scrib 0.1.0-alpha.1" \
+            --notes-file docs/RELEASE_NOTES_0.1.0_ALPHA.1.md \
+            --prerelease
