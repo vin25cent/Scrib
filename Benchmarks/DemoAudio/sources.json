@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "lastReviewedAt": "2026-08-14",
+  "purpose": "Local-only audio fixtures for the offline Scrib demonstration pipeline",
+  "redistributionPolicy": "download-on-demand-never-commit-audio",
+  "sources": [
+    {
+      "id": "crsn-fr-vaccination-benefits",
+      "title": "Les avantages de la vaccination",
+      "language": "fr-FR",
+      "topic": "Santé maternelle et infantile",
+      "teachingUnits": ["UE 2.10", "UE 4.5"],
+      "durationSeconds": 36.0428798185941,
+      "fileName": "vaccination.wav",
+      "byteCount": 3179122,
+      "sha256": "67AFCB4C9DCA54F0DB01BE0218FEE7DBD0AC4FDC7B24F4465620C109A402C383",
+      "landingURL": "https://commons.wikimedia.org/wiki/File:Fran%C3%A7ais_-_les_avantages_de_la_vaccination.wav",
+      "downloadURL": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Fran%C3%A7ais_-_les_avantages_de_la_vaccination.wav",
+      "author": "Centre de recherche en santé de Nouna (CRSN)",
+      "license": "CC BY-SA 4.0",
+      "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "sourceDate": "2015-01-08"
+    },
+    {
+      "id": "crsn-fr-medication-regularity",
+      "title": "Régularité des prises de médicaments",
+      "language": "fr-FR",
+      "topic": "Observance médicamenteuse",
+      "teachingUnits": ["UE 2.11"],
+      "durationSeconds": 26.8304308390023,
+      "fileName": "medicaments.wav",
+      "byteCount": 2366524,
+      "sha256": "CEC01BA34E999AE9EB1613BA1E3C1CB50738AC5B0F830DDF913E82A144754B57",
+      "landingURL": "https://commons.wikimedia.org/wiki/File:Fran%C3%A7ais_-_R%C3%A9gularit%C3%A9_des_prises_de_m%C3%A9dicaments.wav",
+      "downloadURL": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Fran%C3%A7ais_-_R%C3%A9gularit%C3%A9_des_prises_de_m%C3%A9dicaments.wav",
+      "author": "Centre de recherche en santé de Nouna (CRSN)",
+      "license": "CC BY-SA 4.0",
+      "licenseURL": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "sourceDate": "2015-01-08"
+    }
+  ]
+}

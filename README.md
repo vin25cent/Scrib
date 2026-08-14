@@ -65,6 +65,16 @@ chaque envoi sur `main` et pour chaque pull request. Il publie également pendan
 son empreinte SHA-256. Cette archive sert aux essais ; macOS demandera une
 autorisation manuelle et elle n'est ni notarée ni prête à distribuer au public.
 
+### Audios publics de démonstration
+
+Deux courts messages médicaux français sous licence CC BY-SA 4.0 sont référencés
+dans `Benchmarks/DemoAudio/sources.json`. Ils ne sont pas stockés dans Git et se
+téléchargent localement avec contrôle SHA-256 :
+
+```powershell
+.\Scripts\Download-DemoAudio.ps1
+```
+
 ## État du projet
 
 - dépôt Git local initialisé ;

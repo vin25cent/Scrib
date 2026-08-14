@@ -55,7 +55,9 @@ mesures RAM/thermique restent à exécuter sur le MacBook cible.
 L’interface préparatoire est disponible : éditeur de transcription, recherche,
 corrections, renvois audio, passages incertains et informations médicales
 importantes. Un mode démonstration local permet de tester ces parcours sans média
-réel. Le raccordement au moteur retenu reste conditionné au benchmark.
+personnel. Deux courts audios médicaux français réutilisables sous CC BY-SA 4.0
+sont catalogués et téléchargés à la demande avec vérification SHA-256. Le
+raccordement au moteur retenu reste conditionné au benchmark.
 
 ## Phase 4 — Génération structurée et DOCX
 
