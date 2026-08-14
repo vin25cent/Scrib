@@ -7,20 +7,25 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $model.selectedSection) {
-                Section("Cours") {
-                    navigationRow(.newCourse)
-                    navigationRow(.segments)
-                    navigationRow(.queue)
+            VStack(spacing: 0) {
+                brandHeader
+                List(selection: $model.selectedSection) {
+                    Section("COURS") {
+                        navigationRow(.newCourse)
+                        navigationRow(.segments)
+                        navigationRow(.queue)
+                    }
+                    Section("APPLICATION") {
+                        navigationRow(.settings)
+                    }
                 }
-                Section("Application") {
-                    navigationRow(.settings)
-                }
-            }
-            .navigationTitle("Scrib")
-            .safeAreaInset(edge: .bottom) {
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .tint(ScribDesign.accent)
                 storageSummary
             }
+            .background(ScribDesign.sidebar)
+            .navigationSplitViewColumnWidth(min: 230, ideal: 260, max: 300)
         } detail: {
             switch model.selectedSection ?? .newCourse {
             case .newCourse:
@@ -61,29 +66,76 @@ struct ContentView: View {
         .task {
             await model.prepareQueue()
         }
+        .tint(ScribDesign.accent)
     }
 
     private func navigationRow(_ section: RecordingViewModel.Section) -> some View {
-        Label(section.rawValue, systemImage: section.systemImage)
-            .tag(section)
+        HStack(spacing: 10) {
+            Image(systemName: section.systemImage)
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 20)
+            Text(section.rawValue)
+                .font(.body.weight(section == model.selectedSection ? .semibold : .regular))
+            Spacer()
+            if section == .queue, model.trackingSummary.attentionCount > 0 {
+                Text("\(model.trackingSummary.attentionCount)")
+                    .font(.caption2.bold())
+                    .foregroundStyle(ScribDesign.accent)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(ScribDesign.accent.opacity(0.1), in: Capsule())
+            }
+        }
+        .padding(.vertical, 5)
+        .tag(section)
+    }
+
+    private var brandHeader: some View {
+        HStack(spacing: 12) {
+            Text("S")
+                .font(.system(size: 23, weight: .medium, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(
+                    LinearGradient(
+                        colors: [ScribDesign.accent, Color(red: 0.43, green: 0.52, blue: 1)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 11)
+                )
+            Text("Scrib")
+                .font(.title2.weight(.bold))
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
     }
 
     private var storageSummary: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Divider()
-            Text("Stockage local")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Stockage local", systemImage: "internaldrive")
+                Spacer()
+                Circle()
+                    .fill(ScribDesign.success)
+                    .frame(width: 7, height: 7)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
             if let capacity = model.lastAvailableCapacity {
                 Text("\(model.formatBytes(capacity)) disponibles")
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
             } else {
-                Text("Vérifié au démarrage")
-                    .font(.subheadline)
+                Text("Vérifié au premier enregistrement")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding()
-        .background(.bar)
+        .padding(14)
+        .background(.background.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
+        .padding(14)
     }
 }
 
@@ -97,9 +149,11 @@ private struct NewCourseView: View {
                 courseForm
                 RecordingControlCard(model: model)
             }
-            .padding(36)
-            .frame(maxWidth: 1_100, alignment: .leading)
+            .padding(.horizontal, 44)
+            .padding(.vertical, 36)
+            .frame(maxWidth: 1_180, alignment: .leading)
         }
+        .background(ScribDesign.canvas)
         .navigationTitle("Nouveau cours")
     }
 
@@ -107,21 +161,34 @@ private struct NewCourseView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Nouveau cours")
-                    .font(.largeTitle)
+                    .font(.system(size: 34, weight: .semibold))
                 Text("Renseignez les informations avant de lancer l’enregistrement.")
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Label(model.snapshot.activeInputName, systemImage: "mic.fill")
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(ScribDesign.success)
+                    .frame(width: 8, height: 8)
+                Text(model.snapshot.activeInputName)
+                    .lineLimit(1)
+            }
+                .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(.blue.opacity(0.1), in: Capsule())
-                .foregroundStyle(.blue)
+                .background(ScribDesign.accent.opacity(0.08), in: Capsule())
+                .foregroundStyle(ScribDesign.accentDark)
         }
     }
 
     private var courseForm: some View {
-        GroupBox("Informations du cours") {
+        VStack(alignment: .leading, spacing: 20) {
+            ScribSectionHeading(
+                "Informations du cours",
+                subtitle: "Tous les champs sont obligatoires.",
+                icon: "book.closed.fill"
+            )
+
             Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 18) {
                 GridRow {
                     field("Semestre") {
@@ -178,20 +245,21 @@ private struct NewCourseView: View {
             }
             .textFieldStyle(.roundedBorder)
             .pickerStyle(.menu)
-            .padding(.top, 12)
+            .controlSize(.large)
 
             HStack {
                 Label(
                     "Environ \(model.formatBytes(model.estimatedAudioSize)) avec marge de sécurité",
-                    systemImage: "internaldrive"
+                    systemImage: "checkmark.circle.fill"
                 )
+                .foregroundStyle(ScribDesign.success)
                 Spacer()
-                Text("Segments récupérables toutes les 10 minutes")
+                Label("Sauvegarde toutes les 10 minutes", systemImage: "arrow.clockwise")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
-            .padding(.top, 16)
         }
+        .scribCard(padding: 24)
     }
 
     private func field<Content: View>(
@@ -212,8 +280,7 @@ private struct RecordingControlCard: View {
     @ObservedObject var model: RecordingViewModel
 
     var body: some View {
-        GroupBox {
-            HStack(spacing: 20) {
+        HStack(spacing: 18) {
                 statusIcon
                 VStack(alignment: .leading, spacing: 5) {
                     Text(statusTitle)
@@ -239,15 +306,20 @@ private struct RecordingControlCard: View {
                 }
                 Spacer()
                 controls
-            }
-            .padding(8)
         }
+        .padding(4)
+        .scribCard(padding: 18)
     }
 
     private var statusIcon: some View {
         Image(systemName: model.isRecording ? "record.circle.fill" : model.isPaused ? "pause.circle.fill" : "waveform.circle")
-            .font(.system(size: 32))
-            .foregroundStyle(model.isRecording ? .red : .blue)
+            .font(.system(size: 30, weight: .medium))
+            .foregroundStyle(model.isRecording ? .red : ScribDesign.accent)
+            .frame(width: 48, height: 48)
+            .background(
+                (model.isRecording ? Color.red : ScribDesign.accent).opacity(0.09),
+                in: Circle()
+            )
     }
 
     private var statusTitle: String {
@@ -284,6 +356,7 @@ private struct RecordingControlCard: View {
             Button("Démarrer l’enregistrement") { model.startTapped() }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .padding(.horizontal, 4)
                 .disabled(!model.canStart)
         }
     }
@@ -293,28 +366,46 @@ private struct SegmentsView: View {
     @ObservedObject var model: RecordingViewModel
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
+            ScribPageHeader(
+                title: "Segments audio",
+                subtitle: "Chaque partie finalisée reste disponible localement.",
+                icon: "waveform"
+            )
             if model.snapshot.segments.isEmpty {
                 PlaceholderView(
                     title: "Aucun segment",
                     message: "Les segments finalisés apparaîtront ici après une pause ou à la fin du cours.",
                     systemImage: "waveform"
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(model.snapshot.segments) { segment in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Segment \(segment.sequence)")
-                            .font(.headline)
-                        Text(segment.fileURL.lastPathComponent)
-                            .foregroundStyle(.secondary)
-                        Text("\(Int(segment.duration)) s · \(model.formatBytes(segment.byteCount))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 14) {
+                        Image(systemName: "waveform")
+                            .foregroundStyle(ScribDesign.accent)
+                            .frame(width: 38, height: 38)
+                            .background(ScribDesign.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Segment \(segment.sequence)")
+                                .font(.headline)
+                            Text(segment.fileURL.lastPathComponent)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            Text("\(Int(segment.duration)) s · \(model.formatBytes(segment.byteCount))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(ScribDesign.success)
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 7)
                 }
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(ScribDesign.canvas)
         .navigationTitle("Segments")
     }
 }
@@ -323,27 +414,45 @@ private struct TeacherSettingsView: View {
     @ObservedObject var model: RecordingViewModel
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
+            ScribPageHeader(
+                title: "Réglages",
+                subtitle: "Gérez les enseignants et leurs autorisations d’enregistrement.",
+                icon: "gearshape.fill"
+            )
             if model.savedTeachers.isEmpty {
                 PlaceholderView(
                     title: "Aucun enseignant enregistré",
                     message: "Un enseignant apparaîtra ici après la première confirmation d’autorisation.",
                     systemImage: "person.crop.circle.badge.checkmark"
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(model.savedTeachers) { teacher in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(teacher.name).font(.headline)
-                        if let date = teacher.recordingAuthorizationConfirmedAt {
-                            Text("Autorisation confirmée le \(date.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    HStack(spacing: 14) {
+                        Image(systemName: "person.fill")
+                            .foregroundStyle(ScribDesign.accent)
+                            .frame(width: 38, height: 38)
+                            .background(ScribDesign.accent.opacity(0.09), in: Circle())
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(teacher.name).font(.headline)
+                            if let date = teacher.recordingAuthorizationConfirmedAt {
+                                Text("Autorisation confirmée le \(date.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        Spacer()
+                        Label("Autorisé", systemImage: "checkmark.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(ScribDesign.success)
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 7)
                 }
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(ScribDesign.canvas)
         .navigationTitle("Réglages")
     }
 }
@@ -370,6 +479,7 @@ private struct ProcessingQueueView: View {
                 }
             }
         }
+        .background(ScribDesign.canvas)
         .navigationTitle("Suivi des cours")
     }
 
@@ -392,8 +502,8 @@ private struct ProcessingQueueView: View {
             }
 
             HStack(spacing: 12) {
-                metricCard("Total", value: model.trackingSummary.totalCount, icon: "books.vertical", color: .blue)
-                metricCard("En cours", value: model.trackingSummary.activeCount, icon: "clock.fill", color: .indigo)
+                metricCard("Total", value: model.trackingSummary.totalCount, icon: "books.vertical", color: ScribDesign.accent)
+                metricCard("En cours", value: model.trackingSummary.activeCount, icon: "clock.fill", color: ScribDesign.accentDark)
                 metricCard("À vérifier", value: model.trackingSummary.attentionCount, icon: "exclamationmark.triangle.fill", color: .orange)
                 metricCard("Terminés", value: model.trackingSummary.completedCount, icon: "checkmark.circle.fill", color: .green)
             }
@@ -408,7 +518,7 @@ private struct ProcessingQueueView: View {
             .frame(maxWidth: 520)
         }
         .padding(20)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(ScribDesign.canvas)
     }
 
     private func metricCard(_ title: String, value: Int, icon: String, color: Color) -> some View {
@@ -429,10 +539,10 @@ private struct ProcessingQueueView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .background(.background, in: RoundedRectangle(cornerRadius: 10))
+        .background(ScribDesign.surface, in: RoundedRectangle(cornerRadius: 12))
         .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(ScribDesign.border, lineWidth: 1)
         }
     }
 
@@ -513,7 +623,12 @@ private struct ProcessingQueueView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(.bar)
+        .background(ScribDesign.mutedSurface)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(ScribDesign.border)
+                .frame(height: 1)
+        }
     }
 
     private func conditionLabel(
@@ -627,7 +742,7 @@ private struct CourseTrackingDetail: View {
             .padding(28)
             .frame(maxWidth: 780, alignment: .leading)
         }
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.35))
+        .background(ScribDesign.canvas)
     }
 
     private var detailHeader: some View {
@@ -662,7 +777,8 @@ private struct CourseTrackingDetail: View {
     }
 
     private var progressCard: some View {
-        GroupBox {
+        VStack(alignment: .leading, spacing: 16) {
+            ScribSectionHeading("Progression globale", icon: "chart.bar.fill")
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text(job.stage?.displayName ?? progressDescription)
@@ -681,15 +797,13 @@ private struct CourseTrackingDetail: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
-            .padding(8)
-        } label: {
-            Label("Progression globale", systemImage: "chart.bar.fill")
-                .font(.headline)
         }
+        .scribCard()
     }
 
     private var attentionCard: some View {
-        GroupBox {
+        VStack(alignment: .leading, spacing: 16) {
+            ScribSectionHeading("Attention requise", icon: "exclamationmark.triangle.fill")
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(job.suspensionReasons, id: \.self) { reason in
                     Label(reason.displayName, systemImage: "pause.circle.fill")
@@ -705,32 +819,27 @@ private struct CourseTrackingDetail: View {
                         .buttonStyle(.borderedProminent)
                 }
             }
-            .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
-        } label: {
-            Label("Attention requise", systemImage: "exclamationmark.triangle.fill")
-                .font(.headline)
-                .foregroundStyle(.orange)
         }
+        .scribCard()
     }
 
     private var timelineCard: some View {
-        GroupBox {
+        VStack(alignment: .leading, spacing: 16) {
+            ScribSectionHeading("Étapes du traitement", icon: "list.bullet.clipboard")
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(timeline.indices, id: \.self) { index in
                     StageTimelineRow(item: timeline[index], isLast: index == timeline.count - 1)
                 }
             }
             .padding(.horizontal, 8)
-            .padding(.top, 8)
-        } label: {
-            Label("Étapes du traitement", systemImage: "list.bullet.clipboard")
-                .font(.headline)
         }
+        .scribCard()
     }
 
     private var informationCard: some View {
-        GroupBox {
+        VStack(alignment: .leading, spacing: 16) {
+            ScribSectionHeading("Informations", icon: "info.circle.fill")
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
                 infoRow("Créé", value: job.createdAt.formatted(date: .abbreviated, time: .shortened))
                 infoRow("Tentatives", value: "\(job.attemptCount)")
@@ -739,11 +848,8 @@ private struct CourseTrackingDetail: View {
                     infoRow("Prochaine tentative", value: nextAttemptAt.formatted(date: .omitted, time: .shortened))
                 }
             }
-            .padding(8)
-        } label: {
-            Label("Informations", systemImage: "info.circle")
-                .font(.headline)
         }
+        .scribCard()
     }
 
     private func infoRow(_ label: String, value: String) -> some View {
