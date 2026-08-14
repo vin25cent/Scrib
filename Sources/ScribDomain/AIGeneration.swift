@@ -12,7 +12,7 @@ public enum AIProviderID: String, Codable, CaseIterable, Hashable, Sendable {
     }
 }
 
-public struct AIModelProfile: Identifiable, Equatable, Codable, Sendable {
+public struct AIModelProfile: Identifiable, Codable, Sendable {
     public var id: String
     public var provider: AIProviderID
     public var modelID: String
@@ -49,7 +49,7 @@ public struct AIModelProfile: Identifiable, Equatable, Codable, Sendable {
     }
 }
 
-public struct AIGenerationPreferences: Equatable, Codable, Sendable {
+public struct AIGenerationPreferences: Codable, Sendable {
     public var selectedModelProfileID: String
     public var trialBudgetUSD: Double
     public var maximumOutputTokens: Int
@@ -68,7 +68,7 @@ public struct AIGenerationPreferences: Equatable, Codable, Sendable {
     }
 }
 
-public struct AIProviderUsage: Equatable, Codable, Sendable {
+public struct AIProviderUsage: Codable, Sendable {
     public var providerRequestID: String
     public var inputTokens: Int
     public var cachedInputTokens: Int
@@ -87,7 +87,7 @@ public struct AIProviderUsage: Equatable, Codable, Sendable {
     }
 }
 
-public struct AIGenerationUsageRecord: Identifiable, Equatable, Codable, Sendable {
+public struct AIGenerationUsageRecord: Identifiable, Codable, Sendable {
     public let id: UUID
     public var idempotencyKey: String
     public var provider: AIProviderID
@@ -124,7 +124,7 @@ public struct AIGenerationUsageRecord: Identifiable, Equatable, Codable, Sendabl
     }
 }
 
-public struct AIGenerationRun: Identifiable, Equatable, Codable, Sendable {
+public struct AIGenerationRun: Identifiable, Codable, Sendable {
     public let id: UUID
     public var courseID: CourseID
     public var idempotencyKey: String

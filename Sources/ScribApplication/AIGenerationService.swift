@@ -1,7 +1,7 @@
 import Foundation
 import ScribDomain
 
-public struct AIProviderGenerationRequest: Equatable, Sendable {
+public struct AIProviderGenerationRequest: Sendable {
     public var courseID: CourseID
     public var modelID: String
     public var idempotencyKey: String
@@ -26,7 +26,7 @@ public struct AIProviderGenerationRequest: Equatable, Sendable {
     }
 }
 
-public struct AIProviderGenerationResponse: Equatable, Sendable {
+public struct AIProviderGenerationResponse: Sendable {
     public var payload: Data
     public var usage: AIProviderUsage
 
@@ -36,7 +36,7 @@ public struct AIProviderGenerationResponse: Equatable, Sendable {
     }
 }
 
-public struct AIGenerationRequest: Equatable, Sendable {
+public struct AIGenerationRequest: Sendable {
     public var course: Course
     public var transcript: TranscriptDraft
     public var supportExtractions: [SupportDocumentExtraction]
@@ -102,7 +102,7 @@ public enum AIGenerationError: LocalizedError, Equatable, Sendable {
     }
 }
 
-public struct AIGenerationPolicy: Equatable, Sendable {
+public struct AIGenerationPolicy: Sendable {
     public var maximumInputCharacters: Int
     public var maximumRetries: Int
 
