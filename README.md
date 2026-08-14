@@ -17,6 +17,8 @@ rendu DOCX. Aucun moteur ML ni fournisseur cloud n'est encore branché.
 - [Référentiel des UE](docs/REFERENTIEL_UE.md)
 - [Protocole de benchmark de transcription](docs/BENCHMARK_TRANSCRIPTION.md)
 - [Format DOCX déterministe](docs/FORMAT_DOCX.md)
+- [Contrat JSON de génération](docs/STRUCTURED_GENERATION.md)
+- [Barrière locale de confidentialité](docs/PRIVACY_GATE.md)
 
 ## Structure
 
@@ -58,7 +60,10 @@ Windows fourni avec Swift et le toolchain installé dans le profil utilisateur.
 
 Le workflow `.github/workflows/macos.yml` utilise un runner Apple Silicon
 `macos-latest` pour compiler la cible `ScribApp` et exécuter tous les tests après
-chaque envoi sur `main` et pour chaque pull request.
+chaque envoi sur `main` et pour chaque pull request. Il publie également pendant
+14 jours `Scrib-macOS-unsigned`, une archive autonome non signée accompagnée de
+son empreinte SHA-256. Cette archive sert aux essais ; macOS demandera une
+autorisation manuelle et elle n'est ni notarée ni prête à distribuer au public.
 
 ## État du projet
 
@@ -76,7 +81,9 @@ chaque envoi sur `main` et pour chaque pull request.
 - métriques de benchmark de transcription et corpus S1 préparés pour les UE 2.1,
   2.2, 2.4 et 2.11, sans média versionné ;
 - premier renderer DOCX déterministe en Swift pur et deux documents témoins
-  fictifs ;
+  fictifs, désormais en A4 avec sommaire, tableaux, figures et liens audio ;
+- contrat JSON `1.0` validé localement et filtre patient bloquant avant le cloud ;
+- adaptateurs simulés permettant de tester le benchmark sans modèle ni audio ;
 - aucun modèle ML ni fournisseur cloud branché.
 
 ## Confidentialité du dépôt

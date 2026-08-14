@@ -12,24 +12,33 @@ la compatibilité Word ; ils ne constituent pas un contenu pédagogique.
 
 ## Système visuel
 
-Le prototype reprend le preset `compact_reference_guide` :
+Le prototype reprend le preset `compact_reference_guide` avec la variante nommée
+`scrib_a4` :
 
-- page Letter portrait, marges de 1 pouce, largeur utile 9360 DXA ;
+- page A4 portrait (11906 × 16838 DXA), marges de 1273 DXA et largeur utile
+  de 9360 DXA ;
 - Calibri 11 pt, interligne 1,25 et espacement 6 pt ;
 - titres 16/13/12 pt avec hiérarchie bleue ;
 - vraies définitions OOXML de listes, sans puces tapées à la main ;
 - encadrés à géométrie fixe 9360 DXA, retrait 120 DXA et marges de cellule
   explicites ;
 - en-tête discret sans filet et pied de page numéroté ;
-- accent Scrib `#355AF3` limité au bloc de titre et aux liens.
+- accent Scrib `#355AF3` limité au bloc de titre et aux liens ;
+- sommaire statique cliquable vers des signets internes ;
+- tableaux bornés à six colonnes, largeurs explicites et ligne d'en-tête répétée ;
+- figures PNG/JPEG incorporées, dimensionnées sans déformation et dotées d'un
+  texte alternatif ;
+- horodatages sensibles reliés au schéma local `scrib://audio?t=...` ;
+- bibliographie avec autorité, URL HTTPS et date de vérification.
 
 Les encadrés ont quatre rôles stables : information, passage incertain,
 information médicale importante et mise à jour scientifique. Les deux premiers
 types sensibles peuvent afficher un horodatage audio.
 
-Le format A4, la table des matières automatique, les images et les tableaux
-complexes seront validés avant le jalon de phase 4. Le prototype Letter permet
-d'abord une comparaison visuelle reproductible entre Word et LibreOffice.
+Le sommaire reste volontairement statique et sans numéros de page afin d'être
+correct dès l'ouverture, y compris si Word n'actualise pas les champs. Une table
+des matières paginée pourra être ajoutée quand la pagination finale aura été
+validée sur le Mac cible.
 
 ## Déterminisme et sécurité
 

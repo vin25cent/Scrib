@@ -28,3 +28,16 @@ jobs:
 
       - name: Run all tests
         run: swift test
+
+      - name: Package the unsigned application
+        run: bash Scripts/Package-MacApp.sh release artifacts
+
+      - name: Upload the unsigned application
+        uses: actions/upload-artifact@v4
+        with:
+          name: Scrib-macOS-unsigned
+          path: |
+            artifacts/Scrib-unsigned.zip
+            artifacts/Scrib-unsigned.zip.sha256
+          if-no-files-found: error
+          retention-days: 14

@@ -29,6 +29,42 @@ struct OOXMLDocumentRendererTests {
         #expect(raw.contains("Cellule &amp; tissus"))
         #expect(raw.contains("Audio 02:05"))
         #expect(raw.contains("w:tblW w:w=\"9360\" w:type=\"dxa\""))
+        #expect(raw.contains("scrib://audio?t=125"))
+        #expect(raw.contains("w:pgSz w:w=\"11906\" w:h=\"16838\""))
+        #expect(raw.contains("w:pgMar w:top=\"1273\" w:right=\"1273\""))
+    }
+
+    @Test func rendererAddsStaticTOCTablesAndAccessibleEmbeddedImages() throws {
+        let raw = String(decoding: try OOXMLDocumentRenderer().data(for: fixture()), as: UTF8.self)
+        #expect(raw.contains("w:anchor=\"section_1\""))
+        #expect(raw.contains("w:bookmarkStart w:id=\"1\" w:name=\"section_1\""))
+        #expect(raw.contains("<w:tblHeader/>"))
+        #expect(raw.contains("<w:gridCol w:w=\"3120\"/>"))
+        #expect(raw.contains("word/media/image1.png"))
+        #expect(raw.contains("relationships/image"))
+        #expect(raw.contains("descr=\"Schéma synthétique de test\""))
+        #expect(!raw.contains("<w:trHeight"))
+    }
+
+    @Test func rendererRejectsMissingImageAsset() {
+        var document = fixture()
+        document.imageAssets = []
+        #expect(throws: OOXMLDocumentRenderer.RenderingError.missingImageAsset("schema")) {
+            try OOXMLDocumentRenderer().data(for: document)
+        }
+    }
+
+    @Test func longAdversarialCourseRemainsDeterministicAndEscaped() throws {
+        var document = fixture()
+        document.sections = (1...80).map { index in
+            .init(title: "Section \(index) <script>", blocks: [.paragraph(String(repeating: "Cours & données. ", count: 50))])
+        }
+        let renderer = OOXMLDocumentRenderer()
+        let first = try renderer.data(for: document)
+        #expect(first == (try renderer.data(for: document)))
+        let raw = String(decoding: first, as: UTF8.self)
+        #expect(raw.contains("Section 80 &lt;script&gt;"))
+        #expect(!raw.contains("Section 80 <script>"))
     }
 
     private func fixture() -> CourseDocument {
@@ -43,6 +79,8 @@ struct OOXMLDocumentRendererTests {
                     blocks: [
                         .paragraph("Un paragraphe."),
                         .bullets(["Premier", "Deuxième"]),
+                        .table(.init(headers: ["Colonne A", "Colonne B", "Colonne C"], rows: [["A", "B", "C"]])),
+                        .figure(.init(assetID: "schema", caption: "Figure de test", altText: "Schéma synthétique de test", widthPoints: 144)),
                         .callout(
                             kind: .uncertainty,
                             title: "À vérifier",
@@ -50,6 +88,15 @@ struct OOXMLDocumentRendererTests {
                             audioTimestamp: 125
                         )
                     ]
+                )
+            ],
+            imageAssets: [
+                .init(
+                    id: "schema",
+                    format: .png,
+                    widthPixels: 1,
+                    heightPixels: 1,
+                    data: Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")!
                 )
             ],
             generatedAt: fixedDate

@@ -60,6 +60,15 @@ private let fullCourse = CourseDocument(
             title: "2. De la cellule au tissu",
             blocks: [
                 .paragraph("Le document peut regrouper les explications successives tout en conservant une formulation fidèle à la transcription validée."),
+                .table(.init(
+                    caption: "Exemple de synthèse structurée",
+                    headers: ["Niveau", "Exemple", "Fonction dans le cours"],
+                    rows: [
+                        ["Cellule", "Cellule épithéliale", "Unité de base"],
+                        ["Tissu", "Épithélium", "Organisation de cellules"]
+                    ],
+                    columnWidthWeights: [1, 2, 3]
+                )),
                 .bullets([
                     "Les notions définies pendant le cours restent dans l'ordre de l'enseignant.",
                     "Les reformulations ajoutées par Scrib doivent être identifiables.",

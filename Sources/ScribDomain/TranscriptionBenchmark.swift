@@ -89,3 +89,75 @@ public struct TranscriptionBenchmarkResult: Equatable, Codable, Sendable {
         self.resources = resources
     }
 }
+
+public struct TranscriptionBenchmarkCase: Equatable, Codable, Sendable {
+    public var id: String
+    public var audioID: String
+    public var audioDurationSeconds: Double
+    public var referenceTranscript: String
+    public var criticalTerms: [String]
+    public var referenceTimestamps: [TimestampedTerm]
+
+    public init(
+        id: String,
+        audioID: String,
+        audioDurationSeconds: Double,
+        referenceTranscript: String,
+        criticalTerms: [String] = [],
+        referenceTimestamps: [TimestampedTerm] = []
+    ) {
+        self.id = id
+        self.audioID = audioID
+        self.audioDurationSeconds = max(audioDurationSeconds, 0)
+        self.referenceTranscript = referenceTranscript
+        self.criticalTerms = criticalTerms
+        self.referenceTimestamps = referenceTimestamps
+    }
+}
+
+public struct BenchmarkAdapterOutput: Equatable, Codable, Sendable {
+    public var transcript: String
+    public var timestamps: [TimestampedTerm]
+    public var processingDurationSeconds: Double
+    public var peakResidentMemoryBytes: Int64?
+    public var modelSizeBytes: Int64?
+    public var highestThermalState: ThermalCondition
+
+    public init(
+        transcript: String,
+        timestamps: [TimestampedTerm] = [],
+        processingDurationSeconds: Double,
+        peakResidentMemoryBytes: Int64? = nil,
+        modelSizeBytes: Int64? = nil,
+        highestThermalState: ThermalCondition = .unknown
+    ) {
+        self.transcript = transcript
+        self.timestamps = timestamps
+        self.processingDurationSeconds = max(processingDurationSeconds, 0)
+        self.peakResidentMemoryBytes = peakResidentMemoryBytes
+        self.modelSizeBytes = modelSizeBytes
+        self.highestThermalState = highestThermalState
+    }
+}
+
+public struct TranscriptionBenchmarkFailure: Equatable, Codable, Sendable {
+    public var engineID: String
+    public var corpusItemID: String
+    public var message: String
+
+    public init(engineID: String, corpusItemID: String, message: String) {
+        self.engineID = engineID
+        self.corpusItemID = corpusItemID
+        self.message = message
+    }
+}
+
+public struct TranscriptionBenchmarkRun: Equatable, Codable, Sendable {
+    public var results: [TranscriptionBenchmarkResult]
+    public var failures: [TranscriptionBenchmarkFailure]
+
+    public init(results: [TranscriptionBenchmarkResult], failures: [TranscriptionBenchmarkFailure]) {
+        self.results = results
+        self.failures = failures
+    }
+}

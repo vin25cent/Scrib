@@ -192,6 +192,11 @@ Le fournisseur reçoit une requête versionnée et renvoie un schéma JSON compr
 sections, paragraphes, tableaux, encadrés, références, incertitudes et liens vers
 les horodatages. Le JSON est validé avant toute génération Word.
 
+Le contrat `1.0` est matérialisé dans `Schemas/` et doublé d'une validation
+sémantique Swift. Avant même cet appel, `PatientIdentifierDetector` et
+`CloudPrivacyGate` bloquent localement les contenus potentiellement identifiants
+tant qu'une revue liée à leur empreinte exacte n'a pas été approuvée.
+
 La recherche scientifique ne donne jamais un navigateur ouvert au modèle. Un
 service local :
 
@@ -212,9 +217,10 @@ n'est sélectionné sans action explicite.
 package Office Open XML. Cette approche évite de confier la mise en page finale au
 modèle et n'exige pas que Word soit piloté pendant le traitement.
 
-Le renderer devra prendre en charge : styles, titres, champs de sommaire, en-têtes
-et pieds de page, pagination, tableaux, images, hyperliens, encadrés et métadonnées.
-Word pourra actualiser le champ de sommaire à l'ouverture si nécessaire.
+Le renderer prend en charge : page A4, styles, titres, sommaire statique cliquable,
+en-têtes et pieds de page, pagination, tableaux, images accessibles, hyperliens,
+liens audio locaux, encadrés, bibliographie et métadonnées. Un sommaire statique
+évite de dépendre d'une actualisation de champs Word lors de la première ouverture.
 
 Le prototype utilise un écrivain ZIP minimal en Swift pur, avec entrées stockées,
 tri déterministe et CRC32 local. Avant la V1, il sera conservé après audit ou
