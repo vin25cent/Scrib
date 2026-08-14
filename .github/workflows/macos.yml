@@ -13,20 +13,22 @@ permissions:
 jobs:
   build-and-test:
     name: Build and test on Apple Silicon
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 20
 
     steps:
       - name: Check out the repository
         uses: actions/checkout@v6
 
-      - name: Show the Swift toolchain
-        run: swift --version
+      - name: Show the Swift toolchain and architecture
+        run: |
+          swift --version
+          test "$(uname -m)" = "arm64"
 
       - name: Build the macOS application target
         run: |
           set -o pipefail
-          if ! swift build --product ScribApp --disable-index-store -v 2>&1 | tee swift-build.log; then
+          if ! swift build --product ScribApp -v 2>&1 | tee swift-build.log; then
             grep -E '(^|: )error:' swift-build.log | tail -20 | while IFS= read -r line; do
               escaped="${line//'%'/'%25'}"
               echo "::error::$escaped"
@@ -38,7 +40,7 @@ jobs:
           fi
 
       - name: Run all tests
-        run: swift test --disable-index-store
+        run: swift test
 
       - name: Package the unsigned application
         run: bash Scripts/Package-MacApp.sh release artifacts

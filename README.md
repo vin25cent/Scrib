@@ -60,8 +60,8 @@ Windows fourni avec Swift et le toolchain installé dans le profil utilisateur.
 
 ### Intégration continue macOS
 
-Le workflow `.github/workflows/macos.yml` utilise un runner Apple Silicon
-`macos-latest` pour compiler la cible `ScribApp` et exécuter tous les tests après
+Le workflow `.github/workflows/macos.yml` utilise le runner Apple Silicon stable
+`macos-15` pour compiler la cible `ScribApp` et exécuter tous les tests après
 chaque envoi sur `main` et pour chaque pull request. Il publie également pendant
 14 jours `Scrib-macOS-unsigned`, une archive autonome non signée accompagnée de
 son empreinte SHA-256. Cette archive sert aux essais ; macOS demandera une

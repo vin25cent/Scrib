@@ -10,8 +10,8 @@ case "$output_directory" in
     ;;
 esac
 
-swift build -c "$configuration" --product ScribApp --disable-index-store
-binary_path="$(swift build -c "$configuration" --product ScribApp --disable-index-store --show-bin-path)/ScribApp"
+swift build -c "$configuration" --product ScribApp
+binary_path="$(swift build -c "$configuration" --product ScribApp --show-bin-path)/ScribApp"
 app_path="$output_directory/Scrib.app"
 
 test -x "$binary_path"
