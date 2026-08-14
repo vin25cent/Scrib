@@ -165,9 +165,11 @@ Règles d'implémentation :
 
 ## 8. Transcription locale
 
-Le port `TranscriptionEngine` masque le moteur concret. Deux candidats seront
-benchmarkés sur la machine finale : une intégration MLX et une intégration
-Core ML native. Le choix ne doit pas imposer Python sur le Mac cible.
+Le port `TranscriptionEngine` masque le moteur concret. Deux candidats natifs
+seront benchmarkés sur la machine finale : WhisperKit/Core ML et
+whisper.cpp/Core ML + Metal. MLX Whisper reste une référence de recherche, car
+son exemple officiel actuel dépend de Python et ne peut pas être livré tel quel
+sur le Mac cible. Le choix final ne doit imposer ni Python ni Homebrew.
 
 Le benchmark compare Small, Medium quantifié et Large-v3-Turbo quantifié avec :
 
@@ -214,9 +216,11 @@ Le renderer devra prendre en charge : styles, titres, champs de sommaire, en-tê
 et pieds de page, pagination, tableaux, images, hyperliens, encadrés et métadonnées.
 Word pourra actualiser le champ de sommaire à l'ouverture si nécessaire.
 
-Une bibliothèque ZIP Swift légère pourra être ajoutée après prototype. Elle devra
-être épinglée, auditée et intégrée à l'application ; aucune dépendance globale ne
-sera installée sur le Mac.
+Le prototype utilise un écrivain ZIP minimal en Swift pur, avec entrées stockées,
+tri déterministe et CRC32 local. Avant la V1, il sera conservé après audit ou
+remplacé par une bibliothèque épinglée si les futurs besoins de compression ou
+de compatibilité le justifient. Aucune dépendance globale ne sera installée sur
+le Mac.
 
 ## 11. Ressources et exécution macOS
 
@@ -260,3 +264,5 @@ n'est pas implémenté dans le socle actuel.
 - [ProcessInfo — Apple](https://developer.apple.com/documentation/foundation/processinfo)
 - [MLX Swift — Apple ML Research](https://github.com/ml-explore/mlx-swift)
 - [Exemple Whisper MLX](https://github.com/ml-explore/mlx-examples/tree/main/whisper)
+- [WhisperKit / Argmax OSS](https://github.com/argmaxinc/argmax-oss-swift)
+- [whisper.cpp](https://github.com/ggml-org/whisper.cpp)

@@ -37,6 +37,10 @@ public protocol DocumentRendering: Sendable {
     func render(courseID: CourseID, transcript: String) async throws
 }
 
+public protocol StructuredDocumentRendering: Sendable {
+    func render(_ document: CourseDocument, to destination: URL) throws
+}
+
 public protocol ProcessingJobRepository: Sendable {
     func save(_ job: ProcessingJob) async throws
     func job(id: ProcessingJobID) async throws -> ProcessingJob?

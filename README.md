@@ -4,9 +4,9 @@ Scrib est une application macOS native destinée à enregistrer des cours IFSI, 
 transcrire localement, puis produire automatiquement deux documents Microsoft
 Word : un cours structuré fidèle et une fiche de révision.
 
-Le dépôt contient la spécification, l'architecture et un premier prototype Swift
-de l'enregistrement. La transcription, les appels d'IA, l'analyse de supports et
-la génération DOCX ne sont pas encore implémentés.
+Le dépôt contient la spécification, l'architecture et les prototypes Swift de
+l'enregistrement, de la file persistante, des métriques de transcription et du
+rendu DOCX. Aucun moteur ML ni fournisseur cloud n'est encore branché.
 
 ## Documents de référence
 
@@ -15,6 +15,8 @@ la génération DOCX ne sont pas encore implémentés.
 - [Feuille de route](docs/ROADMAP.md)
 - [Décisions ouvertes](docs/DECISIONS_OUVERTES.md)
 - [Référentiel des UE](docs/REFERENTIEL_UE.md)
+- [Protocole de benchmark de transcription](docs/BENCHMARK_TRANSCRIPTION.md)
+- [Format DOCX déterministe](docs/FORMAT_DOCX.md)
 
 ## Structure
 
@@ -71,6 +73,10 @@ chaque envoi sur `main` et pour chaque pull request.
   anti-doublon ;
 - surveillance secteur, réseau, température et pression mémoire, avec préemption
   immédiate par un nouvel enregistrement ;
+- métriques de benchmark de transcription et corpus S1 préparés pour les UE 2.1,
+  2.2, 2.4 et 2.11, sans média versionné ;
+- premier renderer DOCX déterministe en Swift pur et deux documents témoins
+  fictifs ;
 - aucun modèle ML ni fournisseur cloud branché.
 
 ## Confidentialité du dépôt

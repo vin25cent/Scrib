@@ -46,6 +46,10 @@ MacBook.
 
 Jalon : décision documentée du moteur compatible avec 8 Go.
 
+État : protocole, corpus versionné sans médias, métriques WER/CER/termes critiques,
+horodatages et facteur temps réel implémentés. Les références humaines et les
+mesures RAM/thermique restent à exécuter sur le MacBook cible.
+
 ## Phase 4 — Génération structurée et DOCX
 
 - comparer des fournisseurs dans la limite totale de 10 € ;
@@ -56,6 +60,11 @@ Jalon : décision documentée du moteur compatible avec 8 Go.
 
 Jalon : cours et fiche s'ouvrant correctement dans Word, avec fidélité évaluée sur
 un jeu de référence.
+
+État anticipé : modèle documentaire structuré et premier renderer OOXML
+déterministe implémentés, avec deux documents témoins fictifs. Le schéma JSON
+cloud, la table des matières, les images et la validation Word sur macOS restent
+à réaliser.
 
 ## Phase 5 — Supports et vérification scientifique
 

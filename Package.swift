@@ -4,7 +4,8 @@ import PackageDescription
 
 var products: [Product] = [
     .library(name: "ScribDomain", targets: ["ScribDomain"]),
-    .library(name: "ScribApplication", targets: ["ScribApplication"])
+    .library(name: "ScribApplication", targets: ["ScribApplication"]),
+    .executable(name: "ScribDocxPreview", targets: ["ScribDocxPreview"])
 ]
 
 var targets: [Target] = [
@@ -19,6 +20,10 @@ var targets: [Target] = [
         linkerSettings: [
             .linkedFramework("IOKit", .when(platforms: [.macOS]))
         ]
+    ),
+    .executableTarget(
+        name: "ScribDocxPreview",
+        dependencies: ["ScribDomain", "ScribInfrastructure"]
     ),
     .testTarget(
         name: "ScribDomainTests",

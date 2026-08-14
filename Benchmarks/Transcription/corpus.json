@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "lastReviewedAt": "2026-08-14",
+  "targetLanguage": "fr-FR",
+  "items": [
+    {
+      "id": "common-voice-fr-spontaneous-3",
+      "title": "Common Voice Spontaneous Speech 3.0 - French",
+      "provider": "Mozilla Data Collective",
+      "landingURL": "https://commonvoice.mozilla.org/en/datasets",
+      "license": "CC0-1.0",
+      "rightsStatus": "eligible",
+      "downloadPolicy": "authenticated-manual-download-no-rehosting",
+      "teachingUnits": [],
+      "role": "French speech baseline",
+      "localReferenceMinutesTarget": 5
+    },
+    {
+      "id": "canal-u-biotechnologies-marines",
+      "title": "Les biotechnologies marines",
+      "provider": "Canal-U / UVED",
+      "landingURL": "https://www.canal-u.tv/chaines/canal-uved/un-ocean-de-ressources/les-biotechnologies-marines",
+      "doi": "10.60527/qmxt-wh20",
+      "license": "Creative Commons Attribution",
+      "rightsStatus": "eligible",
+      "downloadPolicy": "manual-after-license-verification",
+      "teachingUnits": ["UE 2.1"],
+      "role": "Scientific lecture speech and biology vocabulary",
+      "localReferenceMinutesTarget": 7
+    },
+    {
+      "id": "canal-u-communication-animale-poissons",
+      "title": "La communication animale : exemple des poissons",
+      "provider": "Canal-U / UVED",
+      "landingURL": "https://www.canal-u.tv/chaines/canal-uved/les-animaux-approches-des-sciences-biologiques-humaines-et-sociales/la",
+      "doi": "10.60527/2zbz-ep19",
+      "license": "Creative Commons Attribution",
+      "rightsStatus": "eligible",
+      "downloadPolicy": "manual-after-license-verification",
+      "teachingUnits": ["UE 2.1", "UE 2.2"],
+      "role": "Scientific lecture speech and biology vocabulary",
+      "localReferenceMinutesTarget": 6
+    },
+    {
+      "id": "canal-u-ifsi-traumatologie-membres",
+      "title": "IFSI 2013 - Les processus traumatiques : 01 - La traumatologie des membres",
+      "provider": "Canal-U / CEMU Université de Caen Normandie",
+      "landingURL": "https://www.canal-u.tv/chaines/cemu/archives-videos/ifsi-soins-infirmiers-2013",
+      "license": "Droit commun de la propriété intellectuelle",
+      "rightsStatus": "blocked-until-permission",
+      "downloadPolicy": "never-automated",
+      "teachingUnits": ["UE 2.4"],
+      "role": "Exact IFSI domain candidate",
+      "localReferenceMinutesTarget": 0
+    }
+  ],
+  "coverageGaps": [
+    {
+      "teachingUnit": "UE 2.11",
+      "resolution": "Use an authorized real course or a consented controlled reading before engine selection."
+    },
+    {
+      "teachingUnit": "UE 2.4",
+      "resolution": "Do not download the exact Canal-U IFSI material unless written permission or a compatible license is obtained."
+    }
+  ]
+}

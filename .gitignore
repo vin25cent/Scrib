@@ -17,6 +17,8 @@ Secrets.xcconfig
 LocalData/
 Models/
 Diagnostics/
+Benchmarks/Transcription/Local/
+Samples/QA/
 
 # macOS
 .DS_Store
