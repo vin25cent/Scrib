@@ -21,10 +21,14 @@ var targets: [Target] = [
             "ScribApplication"
         ],
         linkerSettings: [
+            .linkedFramework("AVFoundation", .when(platforms: [.macOS])),
             .linkedFramework("Compression", .when(platforms: [.macOS])),
             .linkedFramework("IOKit", .when(platforms: [.macOS])),
+            .linkedFramework("Network", .when(platforms: [.macOS])),
             .linkedFramework("PDFKit", .when(platforms: [.macOS])),
-            .linkedFramework("Security", .when(platforms: [.macOS]))
+            .linkedFramework("Security", .when(platforms: [.macOS])),
+            .linkedFramework("SwiftData", .when(platforms: [.macOS])),
+            .linkedFramework("UserNotifications", .when(platforms: [.macOS]))
         ]
     ),
     .executableTarget(
@@ -57,6 +61,11 @@ targets.append(
         ],
         swiftSettings: [
             .swiftLanguageMode(.v5)
+        ],
+        linkerSettings: [
+            .linkedFramework("AppKit", .when(platforms: [.macOS])),
+            .linkedFramework("SwiftUI", .when(platforms: [.macOS])),
+            .linkedFramework("UniformTypeIdentifiers", .when(platforms: [.macOS]))
         ]
     )
 )
