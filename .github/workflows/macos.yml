@@ -26,11 +26,14 @@ jobs:
       - name: Build the macOS application target
         run: |
           set -o pipefail
-          if ! swift build --product ScribApp 2>&1 | tee swift-build.log; then
+          if ! swift build --product ScribApp -v 2>&1 | tee swift-build.log; then
             grep -E '(^|: )error:' swift-build.log | tail -20 | while IFS= read -r line; do
               escaped="${line//'%'/'%25'}"
               echo "::error::$escaped"
             done
+            diagnostic="$(tail -120 swift-build.log | tr '\n' '|' | cut -c1-60000)"
+            diagnostic="${diagnostic//'%'/'%25'}"
+            echo "::error title=Swift compiler diagnostic::$diagnostic"
             exit 1
           fi
 
