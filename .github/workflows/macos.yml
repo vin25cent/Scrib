@@ -39,10 +39,10 @@ jobs:
             diagnostic="$(tail -120 swift-build.log | tr '\n' '|' | cut -c1-60000)"
             diagnostic="${diagnostic//'%'/'%25'}"
             echo "::error title=Swift compiler diagnostic::$diagnostic"
-            crash_context="$(grep -E 'Stack dump:|Program arguments:|While evaluating request|While type-checking' swift-build.log | tail -12 | tr '\n' '|' | cut -c1-60000)"
+            crash_context="$(grep -E 'Stack dump:|Program arguments:|While evaluating request|While type-checking' swift-build.log | tail -12 | tr '\n' '|' | cut -c1-60000 || true)"
             crash_context="${crash_context//'%'/'%25'}"
             echo "::error title=Swift crash context::$crash_context"
-            linker_context="$(grep -E 'Undefined symbols|referenced from:|symbol\\(s\\) not found|(^| )ld:|clang: error|error: link' swift-build.log | tail -40 | tr '\n' '|' | cut -c1-60000)"
+            linker_context="$(grep -E 'Undefined symbols|referenced from:|symbol\\(s\\) not found|(^| )ld:|clang: error|error: link' swift-build.log | tail -40 | tr '\n' '|' | cut -c1-60000 || true)"
             linker_context="${linker_context//'%'/'%25'}"
             echo "::error title=Linker diagnostic::$linker_context"
             exit 1

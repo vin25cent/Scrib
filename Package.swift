@@ -59,9 +59,6 @@ targets.append(
             "ScribApplication",
             "ScribInfrastructure"
         ],
-        swiftSettings: [
-            .swiftLanguageMode(.v5)
-        ],
         linkerSettings: [
             .linkedFramework("AppKit", .when(platforms: [.macOS])),
             .linkedFramework("SwiftUI", .when(platforms: [.macOS])),
