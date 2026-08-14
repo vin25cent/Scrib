@@ -32,9 +32,11 @@ doublon.
 
 État : la persistance SwiftData, les checkpoints, l'ordre FIFO, l'anti-doublon,
 la reprise après interruption, le backoff, les conditions système et la
-préemption sont implémentés. Une simulation automatisée de 30 cours d'une heure
-passe ; la veille réelle et les changements secteur/réseau seront validés sur le
-MacBook.
+préemption sont implémentés. Le tableau de bord permet de filtrer les cours,
+consulter leur progression, leurs six étapes, leurs blocages et leurs erreurs,
+puis de relancer un traitement suspendu. Une simulation automatisée de 30 cours
+d'une heure passe ; la veille réelle et les changements secteur/réseau seront
+validés sur le MacBook.
 
 ## Phase 3 — Benchmark de transcription locale
 

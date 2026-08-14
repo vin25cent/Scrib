@@ -9,7 +9,7 @@ final class RecordingViewModel: ObservableObject {
     enum Section: String, CaseIterable, Identifiable {
         case newCourse = "Nouveau cours"
         case segments = "Segments"
-        case queue = "File d’attente"
+        case queue = "Suivi des cours"
         case settings = "Réglages"
 
         var id: String { rawValue }
@@ -18,7 +18,7 @@ final class RecordingViewModel: ObservableObject {
             switch self {
             case .newCourse: "plus.circle"
             case .segments: "rectangle.split.2x1"
-            case .queue: "arrow.right"
+            case .queue: "clock.arrow.circlepath"
             case .settings: "gearshape"
             }
         }
@@ -43,6 +43,10 @@ final class RecordingViewModel: ObservableObject {
     @Published private(set) var lastAvailableCapacity: Int64?
     @Published private(set) var lowSoundWarning = false
     @Published private(set) var processingJobs: [ProcessingJob] = []
+    @Published var trackingFilter: CourseTrackingFilter = .all {
+        didSet { selectFirstVisibleJobIfNeeded() }
+    }
+    @Published var selectedProcessingJobID: ProcessingJobID?
     @Published private(set) var systemConditions = SystemConditionSnapshot(
         isOnExternalPower: false,
         isNetworkAvailable: false,
@@ -57,6 +61,7 @@ final class RecordingViewModel: ObservableObject {
     private let teacherStore: any TeacherAuthorizationStoring
     private let queueCoordinator: ProcessingQueueCoordinator
     private let readinessValidator = RecordingReadinessValidator()
+    private let trackingPresenter = CourseTrackingPresenter()
     private var pendingTeacher: Teacher?
     private var pollingTask: Task<Void, Never>?
     private var queuePollingTask: Task<Void, Never>?
@@ -94,6 +99,23 @@ final class RecordingViewModel: ObservableObject {
 
     var estimatedAudioSize: Int64 {
         AudioStoragePolicy.requiredBytes(for: expectedDuration)
+    }
+
+    var trackingSummary: CourseTrackingSummary {
+        trackingPresenter.summary(for: processingJobs)
+    }
+
+    var filteredProcessingJobs: [ProcessingJob] {
+        trackingPresenter.jobs(processingJobs, matching: trackingFilter)
+    }
+
+    var selectedProcessingJob: ProcessingJob? {
+        guard let selectedProcessingJobID else { return filteredProcessingJobs.first }
+        return processingJobs.first { $0.id == selectedProcessingJobID }
+    }
+
+    func trackingTimeline(for job: ProcessingJob) -> [CourseTrackingStageItem] {
+        trackingPresenter.timeline(for: job)
     }
 
     var menuBarSystemImage: String {
@@ -154,6 +176,7 @@ final class RecordingViewModel: ObservableObject {
         do {
             processingJobs = try await queueCoordinator.jobs()
             systemConditions = await queueCoordinator.currentConditions()
+            selectFirstVisibleJobIfNeeded()
         } catch {
             errorMessage = "La file d’attente n’a pas pu être lue : \(error.localizedDescription)"
         }
@@ -168,6 +191,22 @@ final class RecordingViewModel: ObservableObject {
                 errorMessage = "Le cours n’a pas pu être relancé : \(error.localizedDescription)"
             }
         }
+    }
+
+    func selectProcessingJob(_ id: ProcessingJobID?) {
+        selectedProcessingJobID = id
+    }
+
+    private func selectFirstVisibleJobIfNeeded() {
+        let visible = filteredProcessingJobs
+        guard !visible.isEmpty else {
+            selectedProcessingJobID = nil
+            return
+        }
+        if let selectedProcessingJobID, visible.contains(where: { $0.id == selectedProcessingJobID }) {
+            return
+        }
+        selectedProcessingJobID = visible.first?.id
     }
 
     func confirmAuthorizationAndStart() {

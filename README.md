@@ -76,6 +76,8 @@ autorisation manuelle et elle n'est ni notarée ni prête à distribuer au publi
   intégrés, en attente de validation sur le microphone du MacBook ;
 - file FIFO persistée avec SwiftData, checkpoints, reprise après interruption et
   anti-doublon ;
+- tableau de bord de suivi avec filtres, compteurs, détail d’un cours, progression
+  et chronologie des checkpoints ;
 - surveillance secteur, réseau, température et pression mémoire, avec préemption
   immédiate par un nouvel enregistrement ;
 - métriques de benchmark de transcription et corpus S1 préparés pour les UE 2.1,
