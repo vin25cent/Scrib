@@ -126,7 +126,13 @@ struct SimpleZIPArchiveReader {
     private static func inflate(_ source: Data, expectedSize: Int) throws -> Data {
         if expectedSize == 0 { return Data() }
         var output = Data(count: expectedSize + 1)
-        var stream = compression_stream()
+        var stream = compression_stream(
+            dst_ptr: nil,
+            dst_size: 0,
+            src_ptr: nil,
+            src_size: 0,
+            state: nil
+        )
         guard compression_stream_init(&stream, COMPRESSION_STREAM_DECODE, COMPRESSION_ZLIB)
                 != COMPRESSION_STATUS_ERROR else {
             throw Error.invalidArchive
