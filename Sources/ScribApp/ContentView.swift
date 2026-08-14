@@ -429,6 +429,7 @@ private struct SegmentsView: View {
     }
 }
 
+#if false // Kept temporarily as a layout reference; the compiled view is split into SettingsViews.swift.
 private struct TeacherSettingsView: View {
     @ObservedObject var model: RecordingViewModel
 
@@ -663,6 +664,7 @@ private struct TeacherSettingsView: View {
         .background(ScribDesign.canvas.opacity(0.7), in: RoundedRectangle(cornerRadius: 10))
     }
 }
+#endif
 
 private struct ProcessingQueueView: View {
     @ObservedObject var model: RecordingViewModel
