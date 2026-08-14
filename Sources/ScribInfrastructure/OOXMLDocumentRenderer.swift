@@ -28,13 +28,13 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
     public func data(for document: CourseDocument) throws -> Data { try buildPackage(for: document) }
 
     private func buildPackage(for document: CourseDocument) throws -> Data {
-        let sources = document.sources.enumerated().map { SourceRelationship(id: "rId\($0.offset + 3)", source: $0.element) }
+        let sources = document.sources.enumerated().map { SourceRelationship(id: "rId\($0.offset + 6)", source: $0.element) }
         let timestamps = Set(document.sections.flatMap(\.blocks).compactMap { block -> Int? in
             guard case let .callout(_, _, _, timestamp?) = block else { return nil }
             return max(Int(timestamp.rounded()), 0)
         }).sorted()
         let audio = timestamps.enumerated().map {
-            AudioRelationship(id: "rId\(sources.count + $0.offset + 3)", timestamp: $0.element)
+            AudioRelationship(id: "rId\(sources.count + $0.offset + 6)", timestamp: $0.element)
         }
         let referencedIDs = document.sections.flatMap(\.blocks).compactMap { block -> String? in
             guard case let .figure(figure) = block else { return nil }
@@ -48,7 +48,7 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
         let images = try referencedIDs.enumerated().map { index, id -> ImageRelationship in
             guard let asset = assets[id] else { throw RenderingError.missingImageAsset(id) }
             return ImageRelationship(
-                id: "rId\(sources.count + audio.count + index + 3)",
+                id: "rId\(sources.count + audio.count + index + 6)",
                 asset: asset,
                 mediaName: "image\(index + 1).\(asset.format.fileExtension)",
                 drawingID: index + 1
@@ -119,7 +119,7 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
         let audioLinks = audio.map { "<Relationship Id=\"\($0.id)\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"scrib://audio?t=\($0.timestamp)\" TargetMode=\"External\"/>" }.joined()
         let imageLinks = images.map { "<Relationship Id=\"\($0.id)\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/\($0.mediaName)\"/>" }.joined()
         return xmlHeader + """
-        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>\(sourceLinks)\(audioLinks)\(imageLinks)</Relationships>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>\(sourceLinks)\(audioLinks)\(imageLinks)</Relationships>
         """
     }
 
@@ -127,7 +127,7 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
         var body = titleBlock(document) + tableOfContents(document.sections, includesSources: !sources.isEmpty)
         for (index, section) in document.sections.enumerated() {
             body += heading(section.title, bookmark: "section_\(index + 1)", bookmarkID: index + 1)
-            for block in section.blocks {
+            for (blockIndex, block) in section.blocks.enumerated() {
                 switch block {
                 case let .paragraph(text): body += paragraph(text)
                 case let .bullets(items): body += items.map(bullet).joined()
@@ -138,6 +138,14 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
                 case let .callout(kind, title, text, timestamp):
                     let relationshipID = timestamp.flatMap { value in audio.first(where: { $0.timestamp == max(Int(value.rounded()), 0) })?.id }
                     body += callout(kind: kind, title: title, body: text, audioTimestamp: timestamp, audioRelationshipID: relationshipID)
+                }
+                if blockIndex < section.blocks.count - 1 {
+                    switch block {
+                    case .table, .callout:
+                        body += "<w:p><w:pPr><w:spacing w:before=\"0\" w:after=\"80\"/></w:pPr></w:p>"
+                    default:
+                        break
+                    }
                 }
             }
         }
@@ -162,7 +170,7 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
         var result = paragraph(document.kind == .fullCourse ? "COURS STRUCTURÉ" : "FICHE DE RÉVISION", style: "Kicker")
         result += paragraph(document.title, style: "Title") + paragraph(document.subtitle, style: "Subtitle")
         for item in document.metadata {
-            result += "<w:p><w:pPr><w:pStyle w:val=\"Metadata\"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>\(escape(item.label)) : </w:t></w:r><w:r><w:t>\(escape(item.value))</w:t></w:r></w:p>"
+            result += "<w:p><w:pPr><w:pStyle w:val=\"Metadata\"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space=\"preserve\">\(escape(item.label)) : </w:t></w:r><w:r><w:t>\(escape(item.value))</w:t></w:r></w:p>"
         }
         return result + paragraph("Document de démonstration généré localement par Scrib. Le contenu est fictif et ne constitue pas une référence médicale.", style: "Disclaimer")
     }
@@ -202,7 +210,7 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
         result += "<w:tbl><w:tblPr><w:tblW w:w=\"9360\" w:type=\"dxa\"/><w:tblInd w:w=\"120\" w:type=\"dxa\"/><w:tblLayout w:type=\"fixed\"/><w:tblBorders><w:top w:val=\"single\" w:sz=\"6\" w:color=\"B8C2D1\"/><w:left w:val=\"single\" w:sz=\"6\" w:color=\"B8C2D1\"/><w:bottom w:val=\"single\" w:sz=\"6\" w:color=\"B8C2D1\"/><w:right w:val=\"single\" w:sz=\"6\" w:color=\"B8C2D1\"/><w:insideH w:val=\"single\" w:sz=\"4\" w:color=\"D8DEE8\"/><w:insideV w:val=\"single\" w:sz=\"4\" w:color=\"D8DEE8\"/></w:tblBorders><w:tblCellMar><w:top w:w=\"80\" w:type=\"dxa\"/><w:left w:w=\"120\" w:type=\"dxa\"/><w:bottom w:w=\"80\" w:type=\"dxa\"/><w:right w:w=\"120\" w:type=\"dxa\"/></w:tblCellMar></w:tblPr><w:tblGrid>\(widths.map { "<w:gridCol w:w=\"\($0)\"/>" }.joined())</w:tblGrid>"
         result += tableRow(table.headers, widths: widths, isHeader: true)
         for row in table.rows { result += tableRow(row, widths: widths, isHeader: false) }
-        return result + "</w:tbl><w:p/>"
+        return result + "</w:tbl>"
     }
 
     private func tableRow(_ cells: [String], widths: [Int], isHeader: Bool) -> String {
@@ -236,7 +244,7 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
         let titleRun = "<w:r><w:rPr><w:b/><w:color w:val=\"\(colors.1)\"/></w:rPr><w:t>\(escape(title + timestamp))</w:t></w:r>"
         let linkedTitle = audioRelationshipID.map { "<w:hyperlink r:id=\"\($0)\">\(titleRun)</w:hyperlink>" } ?? titleRun
         return """
-        <w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblInd w:w="120" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="8" w:color="\(colors.1)"/><w:left w:val="single" w:sz="18" w:color="\(colors.1)"/><w:bottom w:val="single" w:sz="8" w:color="\(colors.1)"/><w:right w:val="single" w:sz="8" w:color="\(colors.1)"/></w:tblBorders><w:tblCellMar><w:top w:w="120" w:type="dxa"/><w:left w:w="180" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/><w:right w:w="180" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="9360"/></w:tblGrid><w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:tcPr><w:tcW w:w="9360" w:type="dxa"/><w:shd w:val="clear" w:fill="\(colors.0)"/></w:tcPr><w:p>\(linkedTitle)</w:p><w:p><w:r><w:t xml:space="preserve">\(escape(body))</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/>
+        <w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblInd w:w="120" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="8" w:color="\(colors.1)"/><w:left w:val="single" w:sz="18" w:color="\(colors.1)"/><w:bottom w:val="single" w:sz="8" w:color="\(colors.1)"/><w:right w:val="single" w:sz="8" w:color="\(colors.1)"/></w:tblBorders><w:tblCellMar><w:top w:w="120" w:type="dxa"/><w:left w:w="180" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/><w:right w:w="180" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="9360"/></w:tblGrid><w:tr><w:trPr><w:tblHeader/></w:trPr><w:tc><w:tcPr><w:tcW w:w="9360" w:type="dxa"/><w:shd w:val="clear" w:fill="\(colors.0)"/></w:tcPr><w:p>\(linkedTitle)</w:p><w:p><w:r><w:t xml:space="preserve">\(escape(body))</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
         """
     }
 

@@ -20,6 +20,8 @@ struct OOXMLDocumentRendererTests {
         #expect(raw.contains("word/document.xml"))
         #expect(raw.contains("word/styles.xml"))
         #expect(raw.contains("word/numbering.xml"))
+        #expect(raw.contains("relationships/styles"))
+        #expect(raw.contains("relationships/numbering"))
     }
 
     @Test func rendererEscapesTextAndAddsTimestamp() throws {
