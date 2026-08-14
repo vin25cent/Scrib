@@ -124,7 +124,7 @@ struct TranscriptEditorView: View {
                             passage: passage,
                             text: model.transcriptTextBinding(for: passage.id),
                             toggleFlag: { model.toggleTranscriptFlag($0, passageID: passage.id) },
-                            playAudio: { model.jumpToAudio(at: passage.startTime) },
+                            playAudio: { model.jumpToAudio(at: $0) },
                             formatTimestamp: model.formatTimestamp
                         )
                     }
