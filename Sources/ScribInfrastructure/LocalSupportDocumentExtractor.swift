@@ -7,7 +7,6 @@ import ScribDomain
 
 #if os(macOS)
 import PDFKit
-import ZIPFoundation
 #endif
 
 public enum SupportExtractionError: LocalizedError, Equatable, Sendable {
@@ -71,9 +70,9 @@ public struct LocalSupportDocumentExtractor: SupportDocumentExtracting, Sendable
         from url: URL
     ) throws -> SupportDocumentExtraction {
         #if os(macOS)
-        let archive: Archive
+        let archive: SimpleZIPArchiveReader
         do {
-            archive = try Archive(url: url, accessMode: .read)
+            archive = try SimpleZIPArchiveReader(url: url)
         } catch {
             throw SupportExtractionError.invalidDocument
         }
@@ -90,9 +89,7 @@ public struct LocalSupportDocumentExtractor: SupportDocumentExtracting, Sendable
         }
 
         let parsed = try DOCXContentParser.parse(documentXML)
-        let imageCount = archive.filter {
-            $0.path.hasPrefix("word/media/") && $0.type == .file
-        }.count
+        let imageCount = archive.paths.filter { $0.hasPrefix("word/media/") }.count
         var warnings: [SupportExtractionWarning] = []
         if imageCount > 0 { warnings.append(.imagesRequireReview(imageCount)) }
         if parsed.elements.isEmpty && parsed.tables.isEmpty {
@@ -151,22 +148,18 @@ public struct LocalSupportDocumentExtractor: SupportDocumentExtracting, Sendable
     }
 
     #if os(macOS)
-    private func data(for path: String, in archive: Archive, required: Bool) throws -> Data? {
-        guard let entry = archive[path] else {
+    private func data(for path: String, in archive: SimpleZIPArchiveReader, required: Bool) throws -> Data? {
+        guard archive.contains(path) else {
             if required { throw SupportExtractionError.missingWordContent }
             return nil
         }
-        guard entry.uncompressedSize <= maximumXMLBytes else {
-            throw SupportExtractionError.archiveEntryTooLarge(path)
-        }
-        var result = Data()
-        result.reserveCapacity(Int(entry.uncompressedSize))
         do {
-            _ = try archive.extract(entry) { chunk in result.append(chunk) }
+            return try archive.data(for: path, maximumUncompressedBytes: maximumXMLBytes)
+        } catch SimpleZIPArchiveReader.Error.entryTooLarge {
+            throw SupportExtractionError.archiveEntryTooLarge(path)
         } catch {
             throw SupportExtractionError.invalidDocument
         }
-        return result
     }
     #endif
 

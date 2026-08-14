@@ -18,14 +18,10 @@ var targets: [Target] = [
         name: "ScribInfrastructure",
         dependencies: [
             "ScribDomain",
-            "ScribApplication",
-            .product(
-                name: "ZIPFoundation",
-                package: "ZIPFoundation",
-                condition: .when(platforms: [.macOS])
-            )
+            "ScribApplication"
         ],
         linkerSettings: [
+            .linkedFramework("Compression", .when(platforms: [.macOS])),
             .linkedFramework("IOKit", .when(platforms: [.macOS])),
             .linkedFramework("PDFKit", .when(platforms: [.macOS])),
             .linkedFramework("Security", .when(platforms: [.macOS]))
@@ -69,11 +65,6 @@ let package = Package(
         .macOS(.v14)
     ],
     products: products,
-    dependencies: [
-        .package(
-            url: "https://github.com/weichsel/ZIPFoundation.git",
-            exact: "0.9.20"
-        )
-    ],
+    dependencies: [],
     targets: targets
 )

@@ -43,8 +43,8 @@ compilée ; les outils de développement pourront rester sur une machine de buil
 ou un service d'intégration continue.
 
 Dans Xcode, ouvrir `Package.swift`, choisir le schéma `ScribApp`, puis lancer la
-cible « My Mac ». Le dépôt ne contient aucune clé API. Les dépendances Swift sont
-épinglées dans `Package.resolved`.
+cible « My Mac ». Le dépôt ne contient aucune clé API et n’utilise plus de
+dépendance Swift tierce.
 
 ### Tests du cœur sur Windows
 
