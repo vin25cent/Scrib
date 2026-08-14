@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct APIKeySettings: View {
@@ -10,24 +11,21 @@ struct APIKeySettings: View {
                     model.aiHasStoredKey ? "Clé présente dans le Trousseau" : "Aucune clé enregistrée",
                     systemImage: model.aiHasStoredKey ? "key.fill" : "key"
                 )
-                .foregroundStyle(model.aiHasStoredKey ? ScribDesign.success : .secondary)
+                .foregroundStyle(keyStatusColor)
                 Spacer()
                 if model.aiHasStoredKey {
                     Button("Supprimer", role: .destructive) { model.deleteAIAPIKey() }
                 }
             }
-            SecureField("Coller une nouvelle clé API", text: $model.aiAPIKeyDraft)
+            SecureField("Coller une nouvelle clé API", text: keyDraftBinding)
                 .textFieldStyle(.roundedBorder)
             HStack {
                 Button("Enregistrer dans le Trousseau") { model.saveAIAPIKey() }
-                    .disabled(model.aiAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(isKeyDraftEmpty)
                 Spacer()
                 Toggle(
                     "Autoriser les appels payants",
-                    isOn: Binding(
-                        get: { model.aiPreferences.liveRequestsEnabled },
-                        set: model.setAILiveRequestsEnabled
-                    )
+                    isOn: paidCallsBinding
                 )
                 .toggleStyle(.switch)
                 .disabled(!model.aiHasStoredKey)
@@ -36,5 +34,27 @@ struct APIKeySettings: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var keyStatusColor: Color {
+        model.aiHasStoredKey ? ScribDesign.success : Color.secondary
+    }
+
+    private var isKeyDraftEmpty: Bool {
+        model.aiAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var keyDraftBinding: Binding<String> {
+        Binding(
+            get: { model.aiAPIKeyDraft },
+            set: { model.aiAPIKeyDraft = $0 }
+        )
+    }
+
+    private var paidCallsBinding: Binding<Bool> {
+        Binding(
+            get: { model.aiPreferences.liveRequestsEnabled },
+            set: { model.setAILiveRequestsEnabled($0) }
+        )
     }
 }
