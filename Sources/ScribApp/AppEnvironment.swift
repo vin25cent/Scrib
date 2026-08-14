@@ -4,6 +4,7 @@ import ScribInfrastructure
 @MainActor
 struct AppEnvironment {
     let queueCoordinator: ProcessingQueueCoordinator
+    let demonstrationPipeline: any DemonstrationPipelineRunning
     let supportImporter: any SupportDocumentImporting
     let persistenceWarning: String?
 
@@ -36,6 +37,7 @@ struct AppEnvironment {
 
         return AppEnvironment(
             queueCoordinator: coordinator,
+            demonstrationPipeline: LocalDemonstrationPipeline(repository: repository),
             supportImporter: supportImporter,
             persistenceWarning: warnings.isEmpty ? nil : warnings.joined(separator: "\n")
         )

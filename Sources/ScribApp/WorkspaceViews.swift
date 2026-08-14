@@ -555,12 +555,16 @@ struct DemonstrationModeView: View {
                     }
                     Divider()
                     Label("Données explicitement marquées DÉMO", systemImage: "checkmark.circle.fill")
-                    Label("Aucun fichier audio réel", systemImage: "checkmark.circle.fill")
+                    Label("Uniquement un audio public choisi localement", systemImage: "checkmark.circle.fill")
                     Label("Aucun coût API", systemImage: "checkmark.circle.fill")
                     Label("Réinitialisation immédiate en quittant le mode", systemImage: "checkmark.circle.fill")
                 }
                 .foregroundStyle(ScribDesign.success)
                 .scribCard()
+
+                if model.isDemoMode {
+                    pipelineCard
+                }
 
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -587,6 +591,122 @@ struct DemonstrationModeView: View {
         .background(ScribDesign.canvas)
         .navigationTitle("Démonstration")
         .overlay(alignment: .bottomTrailing) { WorkspaceNotice(model: model) }
+    }
+
+    private var pipelineCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ScribSectionHeading(
+                "Pipeline complet",
+                subtitle: "Audio local → transcription simulée → confidentialité → deux documents Word",
+                icon: "point.3.connected.trianglepath.dotted"
+            )
+
+            pipelineStep(
+                number: 1,
+                title: "Audio public",
+                detail: model.selectedDemoAudioURL?.lastPathComponent ?? "Aucun WAV sélectionné",
+                isComplete: model.selectedDemoAudioURL != nil
+            ) {
+                Button(model.selectedDemoAudioURL == nil ? "Choisir le WAV" : "Changer") {
+                    model.selectDemonstrationAudio()
+                }
+            }
+
+            pipelineStep(
+                number: 2,
+                title: "Confidentialité",
+                detail: model.isPrivacyApproved
+                    ? "Version exacte vérifiée"
+                    : "Une alerte fictive doit être vérifiée",
+                isComplete: model.isPrivacyApproved
+            ) {
+                Button(model.isPrivacyApproved ? "Revoir" : "Vérifier") {
+                    model.selectedSection = .privacy
+                }
+            }
+
+            pipelineStep(
+                number: 3,
+                title: "Traitement local",
+                detail: model.demonstrationPipelineResult == nil
+                    ? "Six checkpoints et génération DOCX"
+                    : "Pipeline terminé avec succès",
+                isComplete: model.demonstrationPipelineResult != nil
+            ) {
+                if model.isDemonstrationPipelineRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button("Exécuter") { model.runDemonstrationPipeline() }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.selectedDemoAudioURL == nil || !model.isPrivacyApproved)
+                }
+            }
+
+            if let result = model.demonstrationPipelineResult {
+                Divider()
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Résultats")
+                        .font(.headline)
+                    artifactRow("Cours complet", url: result.fullCourseURL, icon: "doc.text.fill")
+                    artifactRow("Fiche de révision", url: result.revisionSheetURL, icon: "list.bullet.rectangle.fill")
+                    artifactRow("Transcription persistée", url: result.transcriptURL, icon: "text.alignleft")
+                }
+            }
+        }
+        .scribCard()
+    }
+
+    private func pipelineStep<Actions: View>(
+        number: Int,
+        title: String,
+        detail: String,
+        isComplete: Bool,
+        @ViewBuilder actions: () -> Actions
+    ) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(isComplete ? ScribDesign.success.opacity(0.12) : ScribDesign.accent.opacity(0.09))
+                if isComplete {
+                    Image(systemName: "checkmark")
+                        .font(.caption.bold())
+                        .foregroundStyle(ScribDesign.success)
+                } else {
+                    Text("\(number)")
+                        .font(.caption.bold())
+                        .foregroundStyle(ScribDesign.accent)
+                }
+            }
+            .frame(width: 32, height: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            actions()
+        }
+        .padding(12)
+        .background(ScribDesign.canvas.opacity(0.55), in: RoundedRectangle(cornerRadius: 11))
+    }
+
+    private func artifactRow(_ title: String, url: URL, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(ScribDesign.accent)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(url.lastPathComponent)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Afficher") { model.revealDemonstrationArtifact(url) }
+        }
+        .padding(.vertical, 4)
     }
 
     private func demoFeature(_ title: String, detail: String, icon: String) -> some View {

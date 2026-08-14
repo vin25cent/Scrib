@@ -63,6 +63,9 @@ final class RecordingViewModel: ObservableObject {
     @Published private(set) var supportDocuments: [SupportDocument] = []
     @Published private(set) var privacyReview: PrivacyReview?
     @Published private(set) var isDemoMode = false
+    @Published private(set) var selectedDemoAudioURL: URL?
+    @Published private(set) var demonstrationPipelineResult: DemonstrationPipelineResult?
+    @Published private(set) var isDemonstrationPipelineRunning = false
     @Published var workspaceNotice: String?
     @Published private(set) var systemConditions = SystemConditionSnapshot(
         isOnExternalPower: false,
@@ -77,6 +80,7 @@ final class RecordingViewModel: ObservableObject {
     private let fileStore: any CourseFileStoring
     private let teacherStore: any TeacherAuthorizationStoring
     private let queueCoordinator: ProcessingQueueCoordinator
+    private let demonstrationPipeline: any DemonstrationPipelineRunning
     private let supportImporter: any SupportDocumentImporting
     private let readinessValidator = RecordingReadinessValidator()
     private let trackingPresenter = CourseTrackingPresenter()
@@ -95,6 +99,7 @@ final class RecordingViewModel: ObservableObject {
         fileStore: any CourseFileStoring,
         teacherStore: any TeacherAuthorizationStoring,
         queueCoordinator: ProcessingQueueCoordinator,
+        demonstrationPipeline: any DemonstrationPipelineRunning,
         supportImporter: any SupportDocumentImporting,
         startupWarning: String? = nil
     ) {
@@ -102,6 +107,7 @@ final class RecordingViewModel: ObservableObject {
         self.fileStore = fileStore
         self.teacherStore = teacherStore
         self.queueCoordinator = queueCoordinator
+        self.demonstrationPipeline = demonstrationPipeline
         self.supportImporter = supportImporter
         self.savedTeachers = teacherStore.teachers()
         self.supportDocuments = supportImporter.documents()
@@ -288,6 +294,83 @@ final class RecordingViewModel: ObservableObject {
         NSWorkspace.shared.open(localURL)
     }
 
+    func selectDemonstrationAudio() {
+        let panel = NSOpenPanel()
+        panel.title = "Choisir l’audio public de démonstration"
+        panel.message = "Sélectionnez vaccination.wav ou medicaments.wav téléchargé par le script Scrib."
+        panel.prompt = "Utiliser cet audio"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.wav, .audio]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        selectedDemoAudioURL = url
+        demonstrationPipelineResult = nil
+        workspaceNotice = "Audio sélectionné : \(url.lastPathComponent)"
+    }
+
+    func runDemonstrationPipeline() {
+        guard !isDemonstrationPipelineRunning else { return }
+        guard let transcriptDraft, transcriptDraft.isDemonstration else {
+            errorMessage = "Activez d’abord le mode démonstration."
+            return
+        }
+        guard let selectedDemoAudioURL else {
+            selectDemonstrationAudio()
+            return
+        }
+
+        let teacher = Teacher(
+            name: "Enseignant Démo",
+            recordingAuthorizationConfirmedAt: Date()
+        )
+        let unit = TeachingUnitCatalog.units(for: .semester1).first { $0.code == "2.11" }!
+        let course = Course(
+            id: transcriptDraft.courseID,
+            semester: .semester1,
+            teachingUnit: unit,
+            title: transcriptDraft.courseTitle,
+            teacher: teacher,
+            expectedDuration: .oneHour
+        )
+        let audioMetadata = demonstrationAudioMetadata(for: selectedDemoAudioURL)
+        let request = DemonstrationPipelineRequest(
+            course: course,
+            audioURL: selectedDemoAudioURL,
+            audioAttribution: audioMetadata.attribution,
+            audioLandingURL: audioMetadata.landingURL,
+            transcript: transcriptDraft,
+            privacyReview: privacyReview
+        )
+
+        isDemonstrationPipelineRunning = true
+        workspaceNotice = "Pipeline local en cours…"
+        Task { @MainActor in
+            defer { isDemonstrationPipelineRunning = false }
+            do {
+                demonstrationPipelineResult = try await demonstrationPipeline.run(request)
+                await reloadQueue()
+                workspaceNotice = "Pipeline terminé : les deux documents Word sont prêts."
+            } catch let issue as DemonstrationPipelineError {
+                await reloadQueue()
+                switch issue {
+                case .privacyApprovalRequired:
+                    workspaceNotice = "Pipeline suspendu : vérifiez les alertes de confidentialité."
+                    selectedSection = .privacy
+                case .missingArtifact:
+                    errorMessage = issue.localizedDescription
+                }
+            } catch {
+                await reloadQueue()
+                errorMessage = "Le pipeline de démonstration a échoué : \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func revealDemonstrationArtifact(_ url: URL) {
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
     func activateDemonstrationMode() {
         isDemoMode = true
         transcriptDraft = demonstrationFactory.transcript()
@@ -302,19 +385,50 @@ final class RecordingViewModel: ObservableObject {
     }
 
     func deactivateDemonstrationMode() {
+        let demonstrationCourseID = transcriptDraft?.isDemonstration == true
+            ? transcriptDraft?.courseID
+            : nil
         isDemoMode = false
         if transcriptDraft?.isDemonstration == true {
             transcriptDraft = nil
         }
         supportDocuments.removeAll(where: \.isDemonstration)
         privacyReview = nil
+        selectedDemoAudioURL = nil
+        demonstrationPipelineResult = nil
         workspaceNotice = "Données de démonstration retirées."
         selectedSection = .demonstration
+        if let demonstrationCourseID {
+            Task { @MainActor in
+                try? await demonstrationPipeline.reset(courseID: demonstrationCourseID)
+                await reloadQueue()
+            }
+        }
     }
 
     func formatTimestamp(_ seconds: TimeInterval) -> String {
         let total = max(Int(seconds), 0)
         return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    private func demonstrationAudioMetadata(for url: URL) -> (attribution: String, landingURL: URL?) {
+        let normalized = url.lastPathComponent.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        )
+        if normalized.contains("medicament") {
+            return (
+                "CRSN — Régularité des prises de médicaments — CC BY-SA 4.0",
+                URL(string: "https://commons.wikimedia.org/wiki/File:Fran%C3%A7ais_-_R%C3%A9gularit%C3%A9_des_prises_de_m%C3%A9dicaments.wav")
+            )
+        }
+        if normalized.contains("vaccination") {
+            return (
+                "CRSN — Les avantages de la vaccination — CC BY-SA 4.0",
+                URL(string: "https://commons.wikimedia.org/wiki/File:Fran%C3%A7ais_-_les_avantages_de_la_vaccination.wav")
+            )
+        }
+        return ("Audio local choisi par l’utilisateur — démonstration", nil)
     }
 
     var menuBarSystemImage: String {
@@ -382,6 +496,11 @@ final class RecordingViewModel: ObservableObject {
     }
 
     func retry(_ job: ProcessingJob) {
+        if isDemoMode, transcriptDraft?.courseID == job.courseID {
+            selectedSection = .demonstration
+            runDemonstrationPipeline()
+            return
+        }
         Task {
             do {
                 try await queueCoordinator.retry(jobID: job.id)

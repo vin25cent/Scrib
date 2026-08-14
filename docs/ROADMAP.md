@@ -59,6 +59,12 @@ personnel. Deux courts audios médicaux français réutilisables sous CC BY-SA 4
 sont catalogués et téléchargés à la demande avec vérification SHA-256. Le
 raccordement au moteur retenu reste conditionné au benchmark.
 
+Le pipeline de démonstration est exécutable de bout en bout avec un WAV local :
+copie de travail, normalisation neutre explicitement simulée, transcription
+horodatée simulée, blocage de confidentialité, structuration, rendu des deux DOCX
+et publication dans un dossier local. Les six checkpoints et les artefacts sont
+persistés ; quitter la démonstration les réinitialise.
+
 ## Phase 4 — Génération structurée et DOCX
 
 - comparer des fournisseurs dans la limite totale de 10 € ;

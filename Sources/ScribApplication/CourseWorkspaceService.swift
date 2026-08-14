@@ -135,34 +135,34 @@ public struct DemonstrationWorkspaceFactory: Sendable {
 
     public func transcript() -> TranscriptDraft {
         TranscriptDraft(
-            courseTitle: "La cellule et les tissus — démonstration",
-            teachingUnit: "UE 2.1 — Biologie fondamentale",
+            courseTitle: "Pipeline médical — démonstration",
+            teachingUnit: "UE 2.11 — Pharmacologie et thérapeutiques",
             passages: [
                 TranscriptPassage(
                     speaker: "Enseignant",
-                    startTime: 12,
-                    text: "La membrane plasmique délimite la cellule et participe aux échanges avec le milieu extracellulaire."
+                    startTime: 2,
+                    text: "Cette transcription est un contenu fictif utilisé pour vérifier le pipeline local de Scrib."
                 ),
                 TranscriptPassage(
                     speaker: "Enseignant",
-                    startTime: 68,
-                    text: "Le transport passif suit le gradient de concentration sans consommation directe d’ATP.",
+                    startTime: 7,
+                    text: "La régularité des prises et la vérification de la prescription sont présentées comme des points importants.",
                     flags: [.medicalImportance]
                 ),
                 TranscriptPassage(
                     speaker: "Étudiant 1",
-                    startTime: 124,
-                    text: "Est-ce que toutes les molécules traversent librement la bicouche lipidique ?"
+                    startTime: 13,
+                    text: "Comment retrouver rapidement une information signalée pendant la réécoute ?"
                 ),
                 TranscriptPassage(
                     speaker: "Enseignant",
-                    startTime: 141,
-                    text: "Non, la perméabilité dépend notamment de la taille, de la charge et de la liposolubilité.",
+                    startTime: 18,
+                    text: "Le terme entendu à cet instant doit être confirmé avant la génération définitive.",
                     flags: [.uncertainty]
                 ),
                 TranscriptPassage(
                     speaker: "Enseignant",
-                    startTime: 216,
+                    startTime: 23,
                     text: "Exemple fictif pour tester la confidentialité : patient DEMO, courriel demo.patient@example.invalid."
                 )
             ],
