@@ -9,7 +9,15 @@ var products: [Product] = [
 ]
 
 var targets: [Target] = [
-    .target(name: "ScribDomain"),
+    .target(
+        name: "ScribDomain",
+        swiftSettings: [
+            .unsafeFlags(
+                ["-no-emit-module-separately"],
+                .when(platforms: [.macOS])
+            )
+        ]
+    ),
     .target(
         name: "ScribApplication",
         dependencies: ["ScribDomain"]
