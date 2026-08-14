@@ -8,6 +8,7 @@ public struct DemonstrationPipelineRequest: Equatable, Sendable {
     public var audioLandingURL: URL?
     public var transcript: TranscriptDraft
     public var privacyReview: PrivacyReview?
+    public var supportExtractions: [SupportDocumentExtraction]
 
     public init(
         course: Course,
@@ -15,7 +16,8 @@ public struct DemonstrationPipelineRequest: Equatable, Sendable {
         audioAttribution: String,
         audioLandingURL: URL? = nil,
         transcript: TranscriptDraft,
-        privacyReview: PrivacyReview? = nil
+        privacyReview: PrivacyReview? = nil,
+        supportExtractions: [SupportDocumentExtraction] = []
     ) {
         self.course = course
         self.audioURL = audioURL
@@ -23,6 +25,7 @@ public struct DemonstrationPipelineRequest: Equatable, Sendable {
         self.audioLandingURL = audioLandingURL
         self.transcript = transcript
         self.privacyReview = privacyReview
+        self.supportExtractions = supportExtractions
     }
 }
 
@@ -34,6 +37,7 @@ public struct DemonstrationPipelineResult: Equatable, Codable, Sendable {
     public var fullCourseURL: URL
     public var revisionSheetURL: URL
     public var manifestURL: URL
+    public var supportContextURL: URL
 
     public init(
         job: ProcessingJob,
@@ -42,7 +46,8 @@ public struct DemonstrationPipelineResult: Equatable, Codable, Sendable {
         transcriptURL: URL,
         fullCourseURL: URL,
         revisionSheetURL: URL,
-        manifestURL: URL
+        manifestURL: URL,
+        supportContextURL: URL
     ) {
         self.job = job
         self.workspaceURL = workspaceURL
@@ -51,6 +56,7 @@ public struct DemonstrationPipelineResult: Equatable, Codable, Sendable {
         self.fullCourseURL = fullCourseURL
         self.revisionSheetURL = revisionSheetURL
         self.manifestURL = manifestURL
+        self.supportContextURL = supportContextURL
     }
 }
 
@@ -86,7 +92,11 @@ public struct DemonstrationDocumentFactory: Sendable {
                 label: "Date",
                 value: request.course.courseDate.formatted(date: .abbreviated, time: .omitted)
             ),
-            CourseDocumentMetadata(label: "Audio de démonstration", value: request.audioAttribution)
+            CourseDocumentMetadata(label: "Audio de démonstration", value: request.audioAttribution),
+            CourseDocumentMetadata(
+                label: "Supports enseignant",
+                value: "\(request.supportExtractions.count) support(s) extrait(s) localement"
+            )
         ]
 
         let transcriptBlocks = request.transcript.passages.map(block(for:))
@@ -119,6 +129,7 @@ public struct DemonstrationDocumentFactory: Sendable {
                         "Vérifier la barrière locale de confidentialité avant la structuration."
                     ])]
                 ),
+                supportSection(for: request.supportExtractions),
                 CourseDocumentSection(
                     title: "Transcription structurée",
                     blocks: transcriptBlocks
@@ -145,6 +156,7 @@ public struct DemonstrationDocumentFactory: Sendable {
                     title: "À retenir",
                     blocks: [.bullets(Array(revisionItems))]
                 ),
+                supportRevisionSection(for: request.supportExtractions),
                 CourseDocumentSection(
                     title: "À réécouter",
                     blocks: revisionCallouts(from: uncertain + important)
@@ -211,6 +223,72 @@ public struct DemonstrationDocumentFactory: Sendable {
                 audioTimestamp: $0.startTime
             )
         }
+    }
+
+    private func supportSection(
+        for extractions: [SupportDocumentExtraction]
+    ) -> CourseDocumentSection {
+        guard !extractions.isEmpty else {
+            return CourseDocumentSection(
+                title: "Support de l’enseignant",
+                blocks: [.paragraph("Aucun support enseignant extrait n’est associé à cette démonstration.")]
+            )
+        }
+        var blocks: [CourseDocumentBlock] = extractions.flatMap { extraction in
+            let highlights = supportHighlights(from: extraction, limit: 8)
+            var documentBlocks: [CourseDocumentBlock] = [
+                .paragraph(
+                    "\(extraction.sourceFileName) — contenu extrait localement et conservé comme provenance."
+                )
+            ]
+            if !highlights.isEmpty { documentBlocks.append(.bullets(highlights)) }
+            return documentBlocks
+        }
+        let tables = extractions.flatMap(\.tables).prefix(2).compactMap(courseTable(from:))
+        blocks += tables.map(CourseDocumentBlock.table)
+        return CourseDocumentSection(title: "Support de l’enseignant", blocks: blocks)
+    }
+
+    private func supportRevisionSection(
+        for extractions: [SupportDocumentExtraction]
+    ) -> CourseDocumentSection {
+        let terms = extractions.flatMap { supportHighlights(from: $0, limit: 5) }
+        return CourseDocumentSection(
+            title: "Repères issus du support",
+            blocks: terms.isEmpty
+                ? [.paragraph("Aucun repère de support disponible.")]
+                : [.bullets(Array(terms.prefix(10)))]
+        )
+    }
+
+    private func courseTable(from extracted: SupportExtractedTable) -> CourseDocumentTable? {
+        guard let headers = extracted.rows.first, !headers.isEmpty, headers.count <= 6 else { return nil }
+        let rows = extracted.rows.dropFirst().filter { $0.count == headers.count }
+        guard !rows.isEmpty else { return nil }
+        return CourseDocumentTable(headers: headers, rows: Array(rows))
+    }
+
+    private func supportHighlights(
+        from extraction: SupportDocumentExtraction,
+        limit: Int
+    ) -> [String] {
+        var candidates = extraction.textElements
+            .filter { $0.kind == .heading || $0.kind == .listItem }
+            .map(\.text)
+        if candidates.isEmpty {
+            candidates = extraction.textElements.map(\.text)
+        }
+        if candidates.isEmpty {
+            candidates = extraction.pages.flatMap {
+                $0.text.components(separatedBy: .newlines)
+            }
+        }
+        var seen = Set<String>()
+        return candidates.filter { value in
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { return false }
+            return seen.insert(normalized).inserted
+        }.prefix(limit).map { $0 }
     }
 
     private func timestamp(_ seconds: TimeInterval) -> String {

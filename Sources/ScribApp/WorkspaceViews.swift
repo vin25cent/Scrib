@@ -295,12 +295,7 @@ struct SupportDocumentsView: View {
                             Text("Importé le \(document.importedAt.formatted(date: .abbreviated, time: .shortened)) · \(ByteCountFormatter.string(fromByteCount: document.byteCount, countStyle: .file))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Label(
-                                document.isDemonstration ? "Document fictif, aucun fichier réel" : "Copie locale prête pour l’extraction",
-                                systemImage: "checkmark.circle.fill"
-                            )
-                            .font(.caption)
-                            .foregroundStyle(ScribDesign.success)
+                            extractionStatus(for: document)
                         }
                         Spacer()
                         Button("Ouvrir") { model.openSupportDocument(document) }
@@ -329,6 +324,45 @@ struct SupportDocumentsView: View {
             .padding(.vertical, 5)
             .background(ScribDesign.surface, in: Capsule())
             .overlay { Capsule().stroke(ScribDesign.border) }
+    }
+
+    @ViewBuilder
+    private func extractionStatus(for document: SupportDocument) -> some View {
+        if let extraction = document.extraction {
+            let itemCount = extraction.textElements.count
+            let details = [
+                itemCount > 0 ? "\(itemCount) élément(s)" : nil,
+                !extraction.tables.isEmpty ? "\(extraction.tables.count) tableau(x)" : nil,
+                !extraction.pages.isEmpty ? "\(extraction.pages.count) page(s)" : nil,
+                extraction.imageCount > 0 ? "\(extraction.imageCount) image(s)" : nil
+            ].compactMap { $0 }.joined(separator: " · ")
+            Label(
+                details.isEmpty ? "Extraction terminée" : "Extrait : \(details)",
+                systemImage: extraction.warnings.isEmpty
+                    ? "checkmark.circle.fill"
+                    : "exclamationmark.triangle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(extraction.warnings.isEmpty ? ScribDesign.success : .orange)
+            if let warning = extraction.warnings.first {
+                Text(warning.displayName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        } else if let failure = document.extractionFailure {
+            Label(failure, systemImage: "exclamationmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        } else {
+            Label(
+                document.isDemonstration
+                    ? "Document fictif, aucun fichier réel"
+                    : "Copie locale conservée · extraction non requise",
+                systemImage: "checkmark.circle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(ScribDesign.success)
+        }
     }
 
     private func documentIcon(_ kind: SupportDocumentKind) -> String {
@@ -651,6 +685,7 @@ struct DemonstrationModeView: View {
                     artifactRow("Cours complet", url: result.fullCourseURL, icon: "doc.text.fill")
                     artifactRow("Fiche de révision", url: result.revisionSheetURL, icon: "list.bullet.rectangle.fill")
                     artifactRow("Transcription persistée", url: result.transcriptURL, icon: "text.alignleft")
+                    artifactRow("Contexte des supports", url: result.supportContextURL, icon: "doc.badge.gearshape")
                 }
             }
         }

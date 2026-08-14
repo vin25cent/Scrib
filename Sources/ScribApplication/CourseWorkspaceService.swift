@@ -171,12 +171,32 @@ public struct DemonstrationWorkspaceFactory: Sendable {
     }
 
     public func supportDocument() -> SupportDocument {
-        SupportDocument(
+        let id = UUID()
+        let extraction = SupportDocumentExtraction(
+            documentID: id,
+            sourceFileName: "Support-enseignant-demo.docx",
+            title: "Repères de pharmacologie",
+            textElements: [
+                .init(kind: .heading, text: "Sécurisation de l’administration", level: 1, order: 0),
+                .init(kind: .listItem, text: "Vérifier la prescription et l’identité.", order: 1),
+                .init(kind: .listItem, text: "Tracer l’administration et surveiller les effets.", order: 2)
+            ],
+            tables: [
+                .init(order: 3, rows: [
+                    ["Étape", "Point de vigilance"],
+                    ["Avant", "Prescription et contre-indications"],
+                    ["Après", "Traçabilité et surveillance"]
+                ])
+            ]
+        )
+        return SupportDocument(
+            id: id,
             originalFileName: "Support-enseignant-demo.docx",
             localURL: nil,
             kind: .word,
             byteCount: 428_000,
-            isDemonstration: true
+            isDemonstration: true,
+            extraction: extraction
         )
     }
 }
@@ -184,10 +204,15 @@ public struct DemonstrationWorkspaceFactory: Sendable {
 @MainActor
 public final class InMemorySupportDocumentStore: SupportDocumentImporting {
     private let validator: SupportImportValidator
+    private let extractor: (any SupportDocumentExtracting)?
     private var storedDocuments: [SupportDocument] = []
 
-    public init(validator: SupportImportValidator = .init()) {
+    public init(
+        validator: SupportImportValidator = .init(),
+        extractor: (any SupportDocumentExtracting)? = nil
+    ) {
         self.validator = validator
+        self.extractor = extractor
     }
 
     public func documents() -> [SupportDocument] {
@@ -198,12 +223,24 @@ public final class InMemorySupportDocumentStore: SupportDocumentImporting {
         let values = try sourceURL.resourceValues(forKeys: [.fileSizeKey])
         let byteCount = Int64(values.fileSize ?? 0)
         let kind = try validator.validate(fileName: sourceURL.lastPathComponent, byteCount: byteCount)
-        let document = SupportDocument(
+        var document = SupportDocument(
             originalFileName: sourceURL.lastPathComponent,
             localURL: sourceURL,
             kind: kind,
             byteCount: byteCount
         )
+        if let extractor, kind == .word || kind == .pdf {
+            do {
+                document.extraction = try extractor.extract(
+                    documentID: document.id,
+                    fileName: document.originalFileName,
+                    kind: kind,
+                    from: sourceURL
+                )
+            } catch {
+                document.extractionFailure = error.localizedDescription
+            }
+        }
         storedDocuments.append(document)
         return document
     }

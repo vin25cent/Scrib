@@ -36,6 +36,10 @@ public protocol SupportDocumentImporting: AnyObject {
     func deleteDocument(id: UUID) throws
 }
 
+public protocol SupportDocumentExtracting: Sendable {
+    func extract(documentID: UUID, fileName: String, kind: SupportDocumentKind, from url: URL) throws -> SupportDocumentExtraction
+}
+
 public protocol TranscriptionEngine: Sendable {
     func transcribe(courseID: CourseID) async throws -> String
 }

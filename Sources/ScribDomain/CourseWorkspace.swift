@@ -74,6 +74,110 @@ public enum SupportDocumentKind: String, Codable, CaseIterable, Sendable {
     case image
 }
 
+public enum SupportTextElementKind: String, Codable, Sendable {
+    case heading
+    case paragraph
+    case listItem
+}
+
+public struct SupportTextElement: Equatable, Codable, Sendable {
+    public var kind: SupportTextElementKind
+    public var text: String
+    public var level: Int?
+    public var order: Int
+
+    public init(kind: SupportTextElementKind, text: String, level: Int? = nil, order: Int) {
+        self.kind = kind
+        self.text = text
+        self.level = level
+        self.order = order
+    }
+}
+
+public struct SupportExtractedTable: Equatable, Codable, Sendable {
+    public var order: Int
+    public var rows: [[String]]
+
+    public init(order: Int, rows: [[String]]) {
+        self.order = order
+        self.rows = rows
+    }
+}
+
+public struct SupportExtractedPage: Equatable, Codable, Sendable {
+    public var number: Int
+    public var text: String
+    public var hasExtractableText: Bool
+
+    public init(number: Int, text: String, hasExtractableText: Bool) {
+        self.number = number
+        self.text = text
+        self.hasExtractableText = hasExtractableText
+    }
+}
+
+public enum SupportExtractionWarning: Equatable, Codable, Sendable {
+    case scannedOrEmptyPage(Int)
+    case noExtractableText
+    case imagesRequireReview(Int)
+
+    public var displayName: String {
+        switch self {
+        case let .scannedOrEmptyPage(page):
+            "Page \(page) sans texte extractible (scan possible)."
+        case .noExtractableText:
+            "Aucun texte extractible n’a été trouvé."
+        case let .imagesRequireReview(count):
+            "\(count) image(s) conservée(s) comme repères, sans analyse automatique."
+        }
+    }
+}
+
+public struct SupportDocumentExtraction: Equatable, Codable, Sendable {
+    public var documentID: UUID
+    public var sourceFileName: String
+    public var title: String?
+    public var extractedAt: Date
+    public var textElements: [SupportTextElement]
+    public var tables: [SupportExtractedTable]
+    public var pages: [SupportExtractedPage]
+    public var imageCount: Int
+    public var warnings: [SupportExtractionWarning]
+
+    public init(
+        documentID: UUID,
+        sourceFileName: String,
+        title: String? = nil,
+        extractedAt: Date = Date(),
+        textElements: [SupportTextElement] = [],
+        tables: [SupportExtractedTable] = [],
+        pages: [SupportExtractedPage] = [],
+        imageCount: Int = 0,
+        warnings: [SupportExtractionWarning] = []
+    ) {
+        self.documentID = documentID
+        self.sourceFileName = sourceFileName
+        self.title = title
+        self.extractedAt = extractedAt
+        self.textElements = textElements
+        self.tables = tables
+        self.pages = pages
+        self.imageCount = max(imageCount, 0)
+        self.warnings = warnings
+    }
+
+    public var plainText: String {
+        let structuredText = textElements.sorted { $0.order < $1.order }.map(\.text)
+        let pageText = pages.sorted { $0.number < $1.number }.map(\.text)
+        let tableText = tables.sorted { $0.order < $1.order }
+            .flatMap(\.rows)
+            .flatMap { $0 }
+        return (structuredText + pageText + tableText)
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+}
+
 public struct SupportDocument: Identifiable, Equatable, Codable, Sendable {
     public let id: UUID
     public var originalFileName: String
@@ -82,6 +186,8 @@ public struct SupportDocument: Identifiable, Equatable, Codable, Sendable {
     public var byteCount: Int64
     public var importedAt: Date
     public var isDemonstration: Bool
+    public var extraction: SupportDocumentExtraction?
+    public var extractionFailure: String?
 
     public init(
         id: UUID = UUID(),
@@ -90,7 +196,9 @@ public struct SupportDocument: Identifiable, Equatable, Codable, Sendable {
         kind: SupportDocumentKind,
         byteCount: Int64,
         importedAt: Date = Date(),
-        isDemonstration: Bool = false
+        isDemonstration: Bool = false,
+        extraction: SupportDocumentExtraction? = nil,
+        extractionFailure: String? = nil
     ) {
         self.id = id
         self.originalFileName = originalFileName
@@ -99,5 +207,7 @@ public struct SupportDocument: Identifiable, Equatable, Codable, Sendable {
         self.byteCount = max(byteCount, 0)
         self.importedAt = importedAt
         self.isDemonstration = isDemonstration
+        self.extraction = extraction
+        self.extractionFailure = extractionFailure
     }
 }

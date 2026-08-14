@@ -113,7 +113,10 @@ déjà terminée n'est rejouée que si une de ses entrées change.
 - `ProcessingJob` : étape, statut, progression, tentatives et prochaine reprise.
 - `Artifact` : type, URL, empreinte, version source et état iCloud.
 - `TranscriptRevision` : texte horodaté, locuteurs, incertitudes et version.
-- `SupportDocument` : type, URL, empreinte, extraction et éléments illisibles.
+- `SupportDocument` : type, URL, extraction structurée persistée et éléments
+  illisibles.
+- `SupportDocumentExtraction` : titre, texte ordonné, niveaux de titres, listes,
+  tableaux, pages PDF, nombre d’images, provenance et avertissements.
 - `UsageRecord` : fournisseur, modèle, jetons, coût estimé et mois.
 - `Incident` : catégorie, code, message, extrait optionnel et résolution.
 - `PrivacyReview` : alertes locales de données potentiellement identifiantes,
@@ -227,6 +230,21 @@ tri déterministe et CRC32 local. Avant la V1, il sera conservé après audit ou
 remplacé par une bibliothèque épinglée si les futurs besoins de compression ou
 de compatibilité le justifient. Aucune dépendance globale ne sera installée sur
 le Mac.
+
+## 10.1 Extraction des supports
+
+Le port `SupportDocumentExtracting` sépare l’import du décodage. L’adaptateur
+local lit les DOCX comme des archives OOXML avec ZIPFoundation 0.9.20 épinglé,
+sans LibreOffice ni service réseau dans l’application. Il extrait uniquement les
+parties nécessaires, limite chaque XML à 20 Mio et refuse un package dont les
+métadonnées indiquent qu’il a été généré par Scrib. Les images sont comptées et
+signalées pour revue, sans interprétation automatique.
+
+Sur macOS, PDFKit fournit le texte page par page. Les pages sans texte sont
+conservées dans le résultat avec un avertissement de scan possible ; aucun OCR
+n’est inventé. Les PDF verrouillés et les documents corrompus produisent un état
+d’erreur visible, tandis que la copie locale reste maîtrisée par le magasin de
+supports.
 
 ## 11. Ressources et exécution macOS
 

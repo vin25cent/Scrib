@@ -20,6 +20,7 @@ rm -rf "$app_path" "$output_directory/Scrib-unsigned.zip" "$output_directory/Scr
 mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
 cp "$binary_path" "$app_path/Contents/MacOS/ScribApp"
 cp Packaging/Info.plist "$app_path/Contents/Info.plist"
+cp LICENSE THIRD_PARTY_NOTICES.md "$app_path/Contents/Resources/"
 chmod 755 "$app_path/Contents/MacOS/ScribApp"
 plutil -lint "$app_path/Contents/Info.plist"
 ditto -c -k --sequesterRsrc --keepParent "$app_path" "$output_directory/Scrib-unsigned.zip"

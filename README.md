@@ -92,12 +92,15 @@ téléchargent localement avec contrôle SHA-256 :
   renvois vers les horodatages audio ;
 - import persistant des supports enseignant Word, PDF, présentation, tableur et
   image, avec rejet des documents déjà générés par Scrib ;
+- extraction locale des DOCX (titres, paragraphes, listes, tableaux et repères
+  d’images) et des PDF (texte page par page et pages scannées signalées), avec
+  résultat persisté et injecté dans le pipeline de démonstration ;
 - écran de confidentialité avec aperçus masqués et approbation manuelle liée à
   l’empreinte exacte de la transcription ;
 - mode démonstration local, sans donnée personnelle ni appel API ;
 - pipeline de démonstration de bout en bout avec WAV public local, transcription
-  simulée persistée, barrière de confidentialité, six checkpoints et génération
-  automatique des deux DOCX ;
+  simulée persistée, contexte des supports, barrière de confidentialité, six
+  checkpoints et génération automatique des deux DOCX ;
 - surveillance secteur, réseau, température et pression mémoire, avec préemption
   immédiate par un nouvel enregistrement ;
 - métriques de benchmark de transcription et corpus S1 préparés pour les UE 2.1,

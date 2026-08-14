@@ -7,6 +7,7 @@ public final class LocalSupportDocumentStore: SupportDocumentImporting {
     private let rootDirectory: URL
     private let manifestURL: URL
     private let validator: SupportImportValidator
+    private let extractor: any SupportDocumentExtracting
     private let fileManager: FileManager
     private var storedDocuments: [SupportDocument]
 
@@ -23,11 +24,13 @@ public final class LocalSupportDocumentStore: SupportDocumentImporting {
     public init(
         rootDirectory: URL,
         validator: SupportImportValidator = .init(),
+        extractor: any SupportDocumentExtracting = LocalSupportDocumentExtractor(),
         fileManager: FileManager = .default
     ) throws {
         self.rootDirectory = rootDirectory
         self.manifestURL = rootDirectory.appendingPathComponent("manifest.json")
         self.validator = validator
+        self.extractor = extractor
         self.fileManager = fileManager
         try fileManager.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
         if fileManager.fileExists(atPath: manifestURL.path) {
@@ -60,13 +63,28 @@ public final class LocalSupportDocumentStore: SupportDocumentImporting {
         let destination = rootDirectory.appendingPathComponent(destinationName)
         try fileManager.copyItem(at: sourceURL, to: destination)
 
-        let document = SupportDocument(
+        var document = SupportDocument(
             id: id,
             originalFileName: sourceURL.lastPathComponent,
             localURL: destination,
             kind: kind,
             byteCount: byteCount
         )
+        if kind == .word || kind == .pdf {
+            do {
+                document.extraction = try extractor.extract(
+                    documentID: id,
+                    fileName: document.originalFileName,
+                    kind: kind,
+                    from: destination
+                )
+            } catch SupportExtractionError.generatedByScrib {
+                try? fileManager.removeItem(at: destination)
+                throw SupportExtractionError.generatedByScrib
+            } catch {
+                document.extractionFailure = error.localizedDescription
+            }
+        }
         storedDocuments.append(document)
         do {
             try persistManifest()

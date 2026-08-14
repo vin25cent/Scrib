@@ -98,11 +98,14 @@ public actor LocalDemonstrationPipeline: DemonstrationPipelineRunning {
             return transcriptService.contentFingerprint(for: request.transcript)
         case .analyzing:
             try validatePrivacy(request)
+            try encode(request.supportExtractions, to: supportContextURL(workspace))
             let documents = documentFactory.documents(for: request)
             try encode(documents.0, to: fullCourseModelURL(workspace))
             try encode(documents.1, to: revisionModelURL(workspace))
             return transcriptService.stableFingerprint(
-                request.transcript.plainText + request.audioAttribution
+                request.transcript.plainText
+                    + request.audioAttribution
+                    + request.supportExtractions.map(\.plainText).joined(separator: "\n")
             )
         case .rendering:
             let fullCourse = try decode(CourseDocument.self, from: fullCourseModelURL(workspace))
@@ -153,9 +156,12 @@ public actor LocalDemonstrationPipeline: DemonstrationPipelineRunning {
     }
 
     private func validatePrivacy(_ request: DemonstrationPipelineRequest) throws {
-        let fingerprint = transcriptService.contentFingerprint(for: request.transcript)
+        let content = request.transcript.plainText
+            + "\n"
+            + request.supportExtractions.map(\.plainText).joined(separator: "\n")
+        let fingerprint = transcriptService.stableFingerprint(content)
         switch privacyGate.evaluate(
-            text: request.transcript.plainText,
+            text: content,
             contentFingerprint: fingerprint,
             review: request.privacyReview
         ) {
@@ -195,9 +201,15 @@ public actor LocalDemonstrationPipeline: DemonstrationPipelineRunning {
             transcriptURL: transcriptURL(workspace),
             fullCourseURL: publishedFullCourseURL(workspace),
             revisionSheetURL: publishedRevisionURL(workspace),
-            manifestURL: workspace.appendingPathComponent("artifacts.json")
+            manifestURL: workspace.appendingPathComponent("artifacts.json"),
+            supportContextURL: supportContextURL(workspace)
         )
-        for url in [result.transcriptURL, result.fullCourseURL, result.revisionSheetURL]
+        for url in [
+            result.transcriptURL,
+            result.supportContextURL,
+            result.fullCourseURL,
+            result.revisionSheetURL
+        ]
         where !fileManager.fileExists(atPath: url.path) {
             throw DemonstrationPipelineError.missingArtifact(url.lastPathComponent)
         }
@@ -255,6 +267,10 @@ public actor LocalDemonstrationPipeline: DemonstrationPipelineRunning {
 
     private func revisionModelURL(_ workspace: URL) -> URL {
         workspace.appendingPathComponent("structured/revision-model.json")
+    }
+
+    private func supportContextURL(_ workspace: URL) -> URL {
+        workspace.appendingPathComponent("structured/support-context.json")
     }
 
     private func renderedFullCourseURL(_ workspace: URL) -> URL {

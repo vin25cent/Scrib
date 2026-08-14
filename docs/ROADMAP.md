@@ -61,9 +61,10 @@ raccordement au moteur retenu reste conditionné au benchmark.
 
 Le pipeline de démonstration est exécutable de bout en bout avec un WAV local :
 copie de travail, normalisation neutre explicitement simulée, transcription
-horodatée simulée, blocage de confidentialité, structuration, rendu des deux DOCX
-et publication dans un dossier local. Les six checkpoints et les artefacts sont
-persistés ; quitter la démonstration les réinitialise.
+horodatée simulée, extraction des supports, blocage de confidentialité,
+structuration, rendu des deux DOCX et publication dans un dossier local. Les six
+checkpoints et les artefacts sont persistés ; quitter la démonstration les
+réinitialise.
 
 ## Phase 4 — Génération structurée et DOCX
 
@@ -76,10 +77,10 @@ persistés ; quitter la démonstration les réinitialise.
 Jalon : cours et fiche s'ouvrant correctement dans Word, avec fidélité évaluée sur
 un jeu de référence.
 
-État anticipé : modèle documentaire structuré et premier renderer OOXML
-déterministe implémentés, avec deux documents témoins fictifs. Le schéma JSON
-cloud, la table des matières, les images et la validation Word sur macOS restent
-à réaliser.
+État anticipé : modèle documentaire structuré et renderer OOXML déterministe
+implémentés, avec deux documents témoins fictifs, sommaire, tableaux, figures et
+liens audio. Le schéma JSON cloud est validé localement ; la comparaison réelle
+des fournisseurs et la recette visuelle finale sur Word macOS restent à réaliser.
 
 ## Phase 5 — Supports et vérification scientifique
 
@@ -91,9 +92,14 @@ cloud, la table des matières, les images et la validation Word sur macOS resten
 Jalon : aucune citation finale hors domaine autorisé dans les tests adversariaux.
 
 État : les supports peuvent être sélectionnés, validés, copiés dans le stockage
-local de Scrib, rouverts et supprimés. L’extraction de leur contenu reste à
-brancher. L’écran de revue de confidentialité applique déjà la détection locale,
-le masquage et l’approbation liée à la version exacte du texte.
+local de Scrib, rouverts et supprimés. Les DOCX sont extraits en conservant
+titres, paragraphes, listes, tableaux, ordre et nombre d’images ; les PDF sont
+extraits page par page, avec signalement des pages scannées ou vides. Les
+résultats et avertissements sont persistés et intégrés au pipeline de
+démonstration. Les formats Office historiques, présentations, tableurs, OCR des
+scans et vérification scientifique bornée restent à réaliser. L’écran de revue
+de confidentialité applique déjà la détection locale, le masquage et
+l’approbation liée à la version exacte du texte.
 
 ## Phase 6 — iCloud, empaquetage et recette
 

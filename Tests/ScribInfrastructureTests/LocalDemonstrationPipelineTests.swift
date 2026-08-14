@@ -38,7 +38,10 @@ struct LocalDemonstrationPipelineTests {
             audioURL: audioURL,
             audioAttribution: "CRSN — CC BY-SA 4.0",
             audioLandingURL: URL(string: "https://commons.wikimedia.org/")!,
-            transcript: transcript
+            transcript: transcript,
+            supportExtractions: [
+                DemonstrationWorkspaceFactory().supportDocument().extraction!
+            ]
         )
 
         do {
@@ -58,7 +61,10 @@ struct LocalDemonstrationPipelineTests {
             .preparing, .normalizingAudio, .transcribing
         ])
 
-        let fingerprint = TranscriptWorkspaceService().contentFingerprint(for: transcript)
+        let privacyContent = transcript.plainText
+            + "\n"
+            + request.supportExtractions.map(\.plainText).joined(separator: "\n")
+        let fingerprint = TranscriptWorkspaceService().stableFingerprint(privacyContent)
         request.privacyReview = PrivacyReview(
             contentFingerprint: fingerprint,
             decision: .approved,
@@ -73,6 +79,9 @@ struct LocalDemonstrationPipelineTests {
         #expect(FileManager.default.fileExists(atPath: result.fullCourseURL.path))
         #expect(FileManager.default.fileExists(atPath: result.revisionSheetURL.path))
         #expect(FileManager.default.fileExists(atPath: result.manifestURL.path))
+        #expect(FileManager.default.fileExists(atPath: result.supportContextURL.path))
+        let supportContext = try Data(contentsOf: result.supportContextURL)
+        #expect(String(decoding: supportContext, as: UTF8.self).contains("Support-enseignant-demo.docx"))
         #expect((try Data(contentsOf: result.fullCourseURL)).starts(with: [0x50, 0x4B]))
         #expect((try Data(contentsOf: result.revisionSheetURL)).starts(with: [0x50, 0x4B]))
 

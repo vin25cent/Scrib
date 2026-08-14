@@ -155,18 +155,19 @@ final class RecordingViewModel: ObservableObject {
     }
 
     var privacyFindings: [PrivacyFinding] {
-        guard let transcriptDraft else { return [] }
-        return privacyDetector.scan(transcriptDraft.plainText)
+        guard transcriptDraft != nil else { return [] }
+        return privacyDetector.scan(privacyContent)
     }
 
     var transcriptFingerprint: String? {
-        transcriptDraft.map(transcriptService.contentFingerprint(for:))
+        guard transcriptDraft != nil else { return nil }
+        return transcriptService.stableFingerprint(privacyContent)
     }
 
     var cloudTransmissionDecision: CloudTransmissionDecision? {
-        guard let transcriptDraft, let transcriptFingerprint else { return nil }
+        guard transcriptDraft != nil, let transcriptFingerprint else { return nil }
         return privacyGate.evaluate(
-            text: transcriptDraft.plainText,
+            text: privacyContent,
             contentFingerprint: transcriptFingerprint,
             review: privacyReview
         )
@@ -177,6 +178,13 @@ final class RecordingViewModel: ObservableObject {
         case .allowedNoIdentifiers, .allowedAfterManualReview: true
         default: false
         }
+    }
+
+    private var privacyContent: String {
+        let transcript = transcriptDraft?.plainText ?? ""
+        let supports = supportDocuments.compactMap(\.extraction?.plainText)
+            .joined(separator: "\n")
+        return transcript + "\n" + supports
     }
 
     func trackingTimeline(for job: ProcessingJob) -> [CourseTrackingStageItem] {
@@ -340,7 +348,8 @@ final class RecordingViewModel: ObservableObject {
             audioAttribution: audioMetadata.attribution,
             audioLandingURL: audioMetadata.landingURL,
             transcript: transcriptDraft,
-            privacyReview: privacyReview
+            privacyReview: privacyReview,
+            supportExtractions: supportDocuments.compactMap(\.extraction)
         )
 
         isDemonstrationPipelineRunning = true
@@ -350,7 +359,7 @@ final class RecordingViewModel: ObservableObject {
             do {
                 demonstrationPipelineResult = try await demonstrationPipeline.run(request)
                 await reloadQueue()
-                workspaceNotice = "Pipeline terminé : les deux documents Word sont prêts."
+                workspaceNotice = "Pipeline terminé : supports extraits et deux documents Word prêts."
             } catch let issue as DemonstrationPipelineError {
                 await reloadQueue()
                 switch issue {
