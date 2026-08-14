@@ -127,6 +127,7 @@ struct SimpleZIPArchiveReader {
         if expectedSize == 0 { return Data() }
         guard !source.isEmpty else { throw Error.invalidArchive }
         var output = Data(count: expectedSize + 1)
+        let outputCapacity = output.count
         let placeholder = UnsafeMutablePointer<UInt8>.allocate(capacity: 1)
         defer { placeholder.deallocate() }
         var stream = compression_stream(
@@ -153,11 +154,11 @@ struct SimpleZIPArchiveReader {
                 stream.src_ptr = sourceAddress
                 stream.src_size = source.count
                 stream.dst_ptr = outputAddress
-                stream.dst_size = output.count
+                stream.dst_size = outputCapacity
                 return compression_stream_process(&stream, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
             }
         }
-        let written = output.count - stream.dst_size
+        let written = outputCapacity - stream.dst_size
         guard status == COMPRESSION_STATUS_END, written == expectedSize else {
             throw Error.invalidArchive
         }
