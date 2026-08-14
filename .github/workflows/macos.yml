@@ -39,9 +39,9 @@ jobs:
             diagnostic="$(tail -120 swift-build.log | tr '\n' '|' | cut -c1-60000)"
             diagnostic="${diagnostic//'%'/'%25'}"
             echo "::error title=Swift compiler diagnostic::$diagnostic"
-            last_task="$(grep -E 'swift-(frontend|driver)|swiftc -module-name' swift-build.log | tail -1 | cut -c1-60000)"
-            last_task="${last_task//'%'/'%25'}"
-            echo "::error title=Last Swift compiler task::$last_task"
+            crash_context="$(grep -E 'Stack dump:|Program arguments:|While evaluating request|While type-checking' swift-build.log | tail -12 | tr '\n' '|' | cut -c1-60000)"
+            crash_context="${crash_context//'%'/'%25'}"
+            echo "::error title=Swift crash context::$crash_context"
             exit 1
           fi
 
