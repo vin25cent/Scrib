@@ -27,6 +27,10 @@ var targets: [Target] = [
     .testTarget(
         name: "ScribApplicationTests",
         dependencies: ["ScribApplication", "ScribDomain"]
+    ),
+    .testTarget(
+        name: "ScribInfrastructureTests",
+        dependencies: ["ScribInfrastructure", "ScribApplication", "ScribDomain"]
     )
 ]
 

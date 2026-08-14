@@ -67,6 +67,10 @@ chaque envoi sur `main` et pour chaque pull request.
 - autorisation d'enregistrer mémorisée par enseignant ;
 - moteur AVFoundation AAC mono, vu-mètre, pause/reprise et segments récupérables
   intégrés, en attente de validation sur le microphone du MacBook ;
+- file FIFO persistée avec SwiftData, checkpoints, reprise après interruption et
+  anti-doublon ;
+- surveillance secteur, réseau, température et pression mémoire, avec préemption
+  immédiate par un nouvel enregistrement ;
 - aucun modèle ML ni fournisseur cloud branché.
 
 ## Confidentialité du dépôt

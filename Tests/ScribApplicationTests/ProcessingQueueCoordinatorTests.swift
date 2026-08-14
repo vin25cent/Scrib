@@ -154,3 +154,37 @@ private var runnableConditions: SystemConditionSnapshot {
     #expect(recovered?.stage == .transcribing)
     #expect(recovered?.progress == 0.4)
 }
+
+@Test func thirtyHourQueueCompletesWithoutDuplicates() async throws {
+    let repository = InMemoryProcessingJobRepository()
+    let executor = SuccessfulStepExecutor()
+    let coordinator = ProcessingQueueCoordinator(
+        repository: repository,
+        conditions: FixedSystemConditionMonitor(snapshot: runnableConditions),
+        executor: executor
+    )
+
+    for index in 1...30 {
+        let teacher = Teacher(
+            name: "Enseignant \(index)",
+            recordingAuthorizationConfirmedAt: Date()
+        )
+        let course = Course(
+            semester: .semester1,
+            teachingUnit: TeachingUnitCatalog.units(for: .semester1)[0],
+            title: "Cours \(index)",
+            teacher: teacher,
+            expectedDuration: .oneHour
+        )
+        _ = try await coordinator.enqueue(course: course)
+        _ = try await coordinator.enqueue(course: course)
+    }
+
+    _ = try await coordinator.processUntilBlockedOrEmpty(maximumSteps: 250)
+    let jobs = await repository.jobs()
+
+    #expect(jobs.count == 30)
+    #expect(jobs.allSatisfy { $0.status == .completed })
+    #expect(Set(jobs.map(\.courseID)).count == 30)
+    #expect(await executor.callCount() == 30 * ProcessingStage.allCases.count)
+}
