@@ -217,10 +217,9 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
         }
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 16_000.0,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: Int(AudioStoragePolicy.targetBitRate),
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+            AVSampleRateKey: AudioStoragePolicy.captureSampleRate,
+            AVNumberOfChannelsKey: AudioStoragePolicy.captureChannelCount,
+            AVEncoderBitRateKey: Int(AudioStoragePolicy.targetBitRate)
         ]
 
         try prepareDestinationDirectory(directory, fileURL: fileURL)
@@ -312,7 +311,7 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
         let availableInputs = AVCaptureDevice.devices(for: .audio)
             .map(\.localizedName)
             .joined(separator: ", ")
-        logAudioRecording("Démarrage; url=\(fileURL.path); parent=\(directory.path); extension=\(fileURL.pathExtension); format=MPEG4AAC; sampleRate=\(settings[AVSampleRateKey] ?? "inconnu")Hz; channels=\(settings[AVNumberOfChannelsKey] ?? "inconnu"); bitRate=\(settings[AVEncoderBitRateKey] ?? "inconnu")bps; encoderQuality=\(settings[AVEncoderAudioQualityKey] ?? "inconnu"); input=\(inputDevice?.localizedName ?? "aucune"); availableInputs=\(availableInputs.isEmpty ? "aucune" : availableInputs)")
+        logAudioRecording("Démarrage; url=\(fileURL.path); parent=\(directory.path); extension=\(fileURL.pathExtension); format=MPEG4AAC; sampleRate=\(settings[AVSampleRateKey] ?? "inconnu")Hz; channels=\(settings[AVNumberOfChannelsKey] ?? "inconnu"); bitRate=\(settings[AVEncoderBitRateKey] ?? "inconnu")bps; encoderQuality=non configurée; input=\(inputDevice?.localizedName ?? "aucune"); availableInputs=\(availableInputs.isEmpty ? "aucune" : availableInputs)")
     }
 
     private func handleRecorderFailure(details: String, fileURL: URL) {

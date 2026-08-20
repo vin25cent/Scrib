@@ -71,7 +71,9 @@ public struct AudioRecorderSnapshot: Equatable, Sendable {
 }
 
 public enum AudioStoragePolicy {
-    public static let targetBitRate: Int64 = 96_000
+    public static let captureSampleRate: Double = 48_000
+    public static let captureChannelCount = 1
+    public static let targetBitRate: Int64 = 64_000
     public static let safetyMultiplier = 1.25
 
     public static func requiredBytes(for duration: ExpectedDuration) -> Int64 {

@@ -40,3 +40,9 @@ import Testing
 
     #expect(AudioStoragePolicy.requiredBytes(for: .twoHours) > rawTwoHourPayload)
 }
+
+@Test func captureProfileUsesStandardMonoAACSettings() {
+    #expect(AudioStoragePolicy.captureSampleRate == 48_000)
+    #expect(AudioStoragePolicy.captureChannelCount == 1)
+    #expect(AudioStoragePolicy.targetBitRate == 64_000)
+}
