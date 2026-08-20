@@ -1,6 +1,7 @@
 #if os(macOS)
 @preconcurrency import AVFoundation
 import Foundation
+import OSLog
 import ScribApplication
 import ScribDomain
 
@@ -26,8 +27,17 @@ private func audioErrorDetails(_ error: Error) -> String {
     return "\(type(of: error)); domaine=\(nsError.domain); code=\(nsError.code); description=\(nsError.localizedDescription)"
 }
 
+private let audioRecordingLogger = Logger(
+    subsystem: "com.vin25cent.scrib",
+    category: "AudioRecording"
+)
+
 private func logAudioRecording(_ message: String) {
-    NSLog("%@", "[Scrib][AudioRecording] \(message)")
+    audioRecordingLogger.notice("[Scrib][AudioRecording] \(message, privacy: .public)")
+}
+
+private func logAudioRecordingError(_ message: String) {
+    audioRecordingLogger.error("[Scrib][AudioRecording] \(message, privacy: .public)")
 }
 
 private final class AudioRecorderDelegate: NSObject, AVAudioRecorderDelegate {
@@ -42,7 +52,7 @@ private final class AudioRecorderDelegate: NSObject, AVAudioRecorderDelegate {
             ?? "AVAudioRecorderDelegate a signalé une erreur d’encodage sans NSError."
         let fileURL = recorder.url
 
-        logAudioRecording("Erreur d’encodage; url=\(fileURL.path); \(details)")
+        logAudioRecordingError("Erreur d’encodage; url=\(fileURL.path); \(details)")
         didFail(details, fileURL)
     }
 
@@ -51,7 +61,7 @@ private final class AudioRecorderDelegate: NSObject, AVAudioRecorderDelegate {
 
         let fileURL = recorder.url
         let details = "AVAudioRecorderDelegate a terminé l’enregistrement avec successfully=false."
-        logAudioRecording("Enregistrement interrompu; url=\(fileURL.path); \(details)")
+        logAudioRecordingError("Enregistrement interrompu; url=\(fileURL.path); \(details)")
         didFail(details, fileURL)
     }
 }
@@ -227,7 +237,7 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
             newRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
         } catch {
             let details = audioErrorDetails(error)
-            logAudioRecording("Création AVAudioRecorder échouée; url=\(fileURL.path); \(details)")
+            logAudioRecordingError("Création AVAudioRecorder échouée; url=\(fileURL.path); \(details)")
             throw AVFoundationAudioRecorderError.cannotStart(details)
         }
 
@@ -268,7 +278,7 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
             )
         } catch {
             let details = audioErrorDetails(error)
-            logAudioRecording("Création du dossier échouée; url=\(fileURL.path); \(details)")
+            logAudioRecordingError("Création du dossier échouée; url=\(fileURL.path); \(details)")
             throw AVFoundationAudioRecorderError.cannotStart(details)
         }
 
