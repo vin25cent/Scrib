@@ -7,7 +7,7 @@ import ScribDomain
 public enum AVFoundationAudioRecorderError: LocalizedError {
     case alreadyActive
     case notRecording
-    case cannotStart
+    case cannotStart(String)
 
     public var errorDescription: String? {
         switch self {
@@ -15,8 +15,45 @@ public enum AVFoundationAudioRecorderError: LocalizedError {
             "Un enregistrement est déjà actif."
         case .notRecording:
             "Aucun enregistrement n’est actif."
-        case .cannotStart:
-            "Le microphone n’a pas pu démarrer l’enregistrement."
+        case .cannotStart(let details):
+            "Le microphone n’a pas pu démarrer l’enregistrement : \(details)"
+        }
+    }
+}
+
+private func audioErrorDetails(_ error: Error) -> String {
+    let nsError = error as NSError
+    return "\(type(of: error)); domaine=\(nsError.domain); code=\(nsError.code); description=\(nsError.localizedDescription)"
+}
+
+private func logAudioRecording(_ message: String) {
+    NSLog("%@", "[Scrib][AudioRecording] \(message)")
+}
+
+private final class AudioRecorderDelegate: NSObject, AVAudioRecorderDelegate {
+    weak var owner: AVFoundationAudioRecorder?
+
+    func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
+        let details = error.map(audioErrorDetails)
+            ?? "AVAudioRecorderDelegate a signalé une erreur d’encodage sans NSError."
+        let fileURL = recorder.url
+
+        logAudioRecording("Erreur d’encodage; url=\(fileURL.path); \(details)")
+        let owner = owner
+        Task { @MainActor [weak owner] in
+            owner?.handleRecorderFailure(details: details, fileURL: fileURL)
+        }
+    }
+
+    func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+        guard !flag else { return }
+
+        let fileURL = recorder.url
+        let details = "AVAudioRecorderDelegate a terminé l’enregistrement avec successfully=false."
+        logAudioRecording("Enregistrement interrompu; url=\(fileURL.path); \(details)")
+        let owner = owner
+        Task { @MainActor [weak owner] in
+            owner?.handleRecorderFailure(details: details, fileURL: fileURL)
         }
     }
 }
@@ -42,6 +79,7 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
 
     private let fileManager: FileManager
     private let permissionProvider: any MicrophonePermissionProviding
+    private let recorderDelegate: AudioRecorderDelegate
     private var recorder: AVAudioRecorder?
     private var courseID: CourseID?
     private var directory: URL?
@@ -66,7 +104,9 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
     ) {
         self.fileManager = fileManager
         self.permissionProvider = permissionProvider
+        self.recorderDelegate = AudioRecorderDelegate()
         super.init()
+        recorderDelegate.owner = self
         observeDeviceDisconnections()
     }
 
@@ -151,13 +191,20 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
 
     private func startNewSegment() throws {
         guard let courseID, let directory else {
-            throw AVFoundationAudioRecorderError.cannotStart
+            throw AVFoundationAudioRecorderError.cannotStart(
+                "La configuration de destination est indisponible."
+            )
         }
 
         let sequence = segments.count + 1
         let fileURL = directory.appendingPathComponent(
             String(format: "segment-%04d.m4a", sequence)
         )
+        guard fileURL.pathExtension.lowercased() == "m4a" else {
+            throw AVFoundationAudioRecorderError.cannotStart(
+                "L’extension de destination ne correspond pas au conteneur AAC/MPEG-4 attendu."
+            )
+        }
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: 16_000.0,
@@ -166,20 +213,104 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]
 
-        let newRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
+        try prepareDestinationDirectory(directory, fileURL: fileURL)
+        let inputDevice = AVCaptureDevice.default(for: .audio)
+        logStartAttempt(
+            fileURL: fileURL,
+            directory: directory,
+            inputDevice: inputDevice,
+            settings: settings
+        )
+
+        let newRecorder: AVAudioRecorder
+        do {
+            newRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
+        } catch {
+            let details = audioErrorDetails(error)
+            logAudioRecording("Création AVAudioRecorder échouée; url=\(fileURL.path); \(details)")
+            throw AVFoundationAudioRecorderError.cannotStart(details)
+        }
+
+        newRecorder.delegate = recorderDelegate
         newRecorder.isMeteringEnabled = true
-        guard newRecorder.prepareToRecord(), newRecorder.record() else {
-            throw AVFoundationAudioRecorderError.cannotStart
+        let prepared = newRecorder.prepareToRecord()
+        logAudioRecording("prepareToRecord=\(prepared); url=\(fileURL.path); format=\(newRecorder.format)")
+        guard prepared else {
+            throw AVFoundationAudioRecorderError.cannotStart(
+                "AVAudioRecorder.prepareToRecord() a retourné false."
+            )
         }
 
         recorder = newRecorder
+        let recordingStarted = newRecorder.record()
+        logAudioRecording("record=\(recordingStarted); isRecording=\(newRecorder.isRecording); url=\(fileURL.path)")
+        guard recordingStarted else {
+            recorder = nil
+            throw AVFoundationAudioRecorderError.cannotStart(
+                "AVAudioRecorder.record() a retourné false."
+            )
+        }
+
         segmentStartedAt = Date()
         state = .recording
-        activeInputName = AVCaptureDevice.default(for: .audio)?.localizedName
+        activeInputName = inputDevice?.localizedName
             ?? "Microphone système"
         scheduleRollover()
 
         _ = courseID
+    }
+
+    private func prepareDestinationDirectory(_ directory: URL, fileURL: URL) throws {
+        do {
+            try fileManager.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            let details = audioErrorDetails(error)
+            logAudioRecording("Création du dossier échouée; url=\(fileURL.path); \(details)")
+            throw AVFoundationAudioRecorderError.cannotStart(details)
+        }
+
+        var isDirectory = ObjCBool(false)
+        let directoryExists = fileManager.fileExists(
+            atPath: directory.path,
+            isDirectory: &isDirectory
+        )
+        let directoryIsWritable = fileManager.isWritableFile(atPath: directory.path)
+        logAudioRecording("Destination; url=\(fileURL.path); parentExists=\(directoryExists); parentIsDirectory=\(isDirectory.boolValue); parentWritable=\(directoryIsWritable)")
+
+        guard directoryExists, isDirectory.boolValue else {
+            throw AVFoundationAudioRecorderError.cannotStart(
+                "Le dossier parent de destination est introuvable."
+            )
+        }
+        guard directoryIsWritable else {
+            throw AVFoundationAudioRecorderError.cannotStart(
+                "Le dossier parent de destination n’est pas accessible en écriture."
+            )
+        }
+    }
+
+    private func logStartAttempt(
+        fileURL: URL,
+        directory: URL,
+        inputDevice: AVCaptureDevice?,
+        settings: [String: Any]
+    ) {
+        let availableInputs = AVCaptureDevice.devices(for: .audio)
+            .map(\.localizedName)
+            .joined(separator: ", ")
+        logAudioRecording("Démarrage; url=\(fileURL.path); parent=\(directory.path); extension=\(fileURL.pathExtension); format=MPEG4AAC; sampleRate=\(settings[AVSampleRateKey] ?? "inconnu")Hz; channels=\(settings[AVNumberOfChannelsKey] ?? "inconnu"); bitRate=\(settings[AVEncoderBitRateKey] ?? "inconnu")bps; encoderQuality=\(settings[AVEncoderAudioQualityKey] ?? "inconnu"); input=\(inputDevice?.localizedName ?? "aucune"); availableInputs=\(availableInputs.isEmpty ? "aucune" : availableInputs)")
+    }
+
+    private func handleRecorderFailure(details: String, fileURL: URL) {
+        guard recorder?.url == fileURL else { return }
+
+        rolloverTask?.cancel()
+        rolloverTask = nil
+        state = .failed
+        incidentMessage = "L’enregistrement audio a échoué : \(details)"
     }
 
     private func finishCurrentSegment(nextState: AudioRecorderState) throws {

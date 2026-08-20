@@ -5,6 +5,14 @@ import Testing
 @testable import ScribInfrastructure
 
 struct AVFoundationAudioRecorderPermissionTests {
+    @Test func startFailurePreservesTechnicalDetails() {
+        let error = AVFoundationAudioRecorderError.cannotStart(
+            "AVAudioRecorder.record() a retourné false."
+        )
+
+        #expect(error.errorDescription?.contains("record() a retourné false") == true)
+    }
+
     @MainActor
     @Test func authorizedPermissionReturnsTrueWithoutRequestingAccess() async {
         let provider = MockMicrophonePermissionProvider(
