@@ -240,6 +240,7 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
             logAudioRecordingError("Création AVAudioRecorder échouée; url=\(fileURL.path); \(details)")
             throw AVFoundationAudioRecorderError.cannotStart(details)
         }
+        logAudioRecording("AVAudioRecorder initialisation=success; url=\(fileURL.path); format=\(newRecorder.format); settings=\(newRecorder.settings)")
 
         newRecorder.delegate = recorderDelegate
         newRecorder.isMeteringEnabled = true

@@ -1,4 +1,4 @@
-# Installer Scrib 0.1.0-alpha.5 sur macOS
+# Installer Scrib 0.1.0-alpha.6 sur macOS
 
 Cette alpha cible un Mac Apple Silicon sous macOS 14 ou plus récent. Pour
 l’utiliser, le Mac n’a besoin ni de Xcode, ni de Swift, ni de Homebrew, ni de
@@ -6,8 +6,8 @@ Python, ni de Terminal.
 
 ## Télécharger
 
-1. Ouvrir la page [Scrib 0.1.0-alpha.5](https://github.com/vin25cent/Scrib/releases/tag/v0.1.0-alpha.5).
-2. Dans **Assets**, télécharger `Scrib-0.1.0-alpha.5-macOS.zip`.
+1. Ouvrir la page [Scrib 0.1.0-alpha.6](https://github.com/vin25cent/Scrib/releases/tag/v0.1.0-alpha.6).
+2. Dans **Assets**, télécharger `Scrib-0.1.0-alpha.6-macOS.zip`.
 3. Le fichier `.sha256` joint permet un contrôle d’intégrité facultatif.
 
 ## Installer et ouvrir sans Terminal
