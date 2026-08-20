@@ -2,14 +2,10 @@ import Foundation
 import ScribDomain
 
 public enum AIProviderID: String, Codable, CaseIterable, Hashable, Sendable {
-    case simulated
     case openAI
 
     public var displayName: String {
-        switch self {
-        case .simulated: "Simulation locale"
-        case .openAI: "OpenAI"
-        }
+        "OpenAI"
     }
 }
 
@@ -57,7 +53,7 @@ public struct AIGenerationPreferences: Codable, Sendable {
     public var liveRequestsEnabled: Bool
 
     public init(
-        selectedModelProfileID: String = "scrib-simulated-v1",
+        selectedModelProfileID: String = "openai-gpt-5.6-luna",
         trialBudgetUSD: Double = 8,
         maximumOutputTokens: Int = 16_000,
         liveRequestsEnabled: Bool = false
@@ -99,7 +95,6 @@ public struct AIGenerationUsageRecord: Identifiable, Codable, Sendable {
     public var outputTokens: Int
     public var estimatedCostUSD: Double
     public var createdAt: Date
-    public var isSimulated: Bool
 
     public init(
         id: UUID = UUID(),
@@ -108,8 +103,7 @@ public struct AIGenerationUsageRecord: Identifiable, Codable, Sendable {
         modelID: String,
         usage: AIProviderUsage,
         estimatedCostUSD: Double,
-        createdAt: Date = Date(),
-        isSimulated: Bool
+        createdAt: Date = Date()
     ) {
         self.id = id
         self.idempotencyKey = idempotencyKey
@@ -121,7 +115,6 @@ public struct AIGenerationUsageRecord: Identifiable, Codable, Sendable {
         self.outputTokens = usage.outputTokens
         self.estimatedCostUSD = max(estimatedCostUSD, 0)
         self.createdAt = createdAt
-        self.isSimulated = isSimulated
     }
 }
 
@@ -293,15 +286,6 @@ public enum AIModelCatalog {
         let verificationDate = Date(timeIntervalSince1970: 1_786_665_600) // 14 août 2026 UTC
         return [
             AIModelProfile(
-                id: "scrib-simulated-v1",
-                provider: .simulated,
-                modelID: "scrib-simulated-v1",
-                displayName: "Simulation Scrib — gratuit",
-                inputPriceUSDPerMillionTokens: 0,
-                outputPriceUSDPerMillionTokens: 0,
-                isLive: false
-            ),
-            AIModelProfile(
                 id: "openai-gpt-5.6-luna",
                 provider: .openAI,
                 modelID: "gpt-5.6-luna",
@@ -397,7 +381,7 @@ public actor StructuredGenerationOrchestrator {
         }
 
         let priorRuns = try await runStore.runs()
-        let spent = priorRuns.filter { !$0.usage.isSimulated }.map(\.usage.estimatedCostUSD).reduce(0, +)
+        let spent = priorRuns.map(\.usage.estimatedCostUSD).reduce(0, +)
         let estimatedInputTokens = max(input.utf8.count / 3, 1)
         let projected = request.modelProfile.estimatedCostUSD(
             inputTokens: estimatedInputTokens,
@@ -451,8 +435,7 @@ public actor StructuredGenerationOrchestrator {
             modelID: request.modelProfile.modelID,
             usage: providerResponse.usage,
             estimatedCostUSD: cost,
-            createdAt: completedAt,
-            isSimulated: !request.modelProfile.isLive
+            createdAt: completedAt
         )
         let run = AIGenerationRun(
             courseID: request.course.id,

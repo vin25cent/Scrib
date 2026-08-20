@@ -38,13 +38,4 @@ struct CourseWorkspaceServiceTests {
             try validator.validate(fileName: "Support.pdf", byteCount: 1_001)
         }
     }
-
-    @Test func demonstrationDataIsExplicitAndTriggersPrivacyReview() {
-        let draft = DemonstrationWorkspaceFactory().transcript()
-        let findings = PatientIdentifierDetector().scan(draft.plainText)
-        #expect(draft.isDemonstration)
-        #expect(draft.passages.contains { $0.flags.contains(.uncertainty) })
-        #expect(draft.passages.contains { $0.flags.contains(.medicalImportance) })
-        #expect(!findings.isEmpty)
-    }
 }

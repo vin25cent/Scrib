@@ -59,19 +59,11 @@ est volontaire, la transcription devient ensuite hors ligne, et le résultat bru
 horodaté est persisté avant toute génération. Cette intégration ne clôt pas la
 décision du moteur : whisper.cpp reste un candidat du benchmark.
 
-L’interface préparatoire est disponible : éditeur de transcription, recherche,
-corrections, renvois audio, passages incertains et informations médicales
-importantes. Un mode démonstration local permet de tester ces parcours sans média
-personnel. Deux courts audios médicaux français réutilisables sous CC BY-SA 4.0
-sont catalogués et téléchargés à la demande avec vérification SHA-256. Le
-raccordement d’un moteur définitif reste conditionné au benchmark réel sur M1.
-
-Le pipeline de démonstration est exécutable de bout en bout avec un WAV local :
-copie de travail, normalisation neutre explicitement simulée, transcription
-horodatée simulée, extraction des supports, blocage de confidentialité,
-structuration, rendu des deux DOCX et publication dans un dossier local. Les six
-checkpoints et les artefacts sont persistés ; quitter la démonstration les
-réinitialise.
+L’interface de transcription est disponible : éditeur, recherche, corrections,
+renvois audio, passages incertains et informations médicales importantes. Le
+parcours réel d’enregistrement, d’arrêt, de création du fichier audio et de
+transcription locale est validé sur le Mac cible. Le choix définitif du moteur
+reste conditionné au benchmark réel sur M1.
 
 ## Phase 4 — Génération structurée et DOCX
 
@@ -85,10 +77,10 @@ Jalon : cours et fiche s'ouvrant correctement dans Word, avec fidélité évalu�
 un jeu de référence.
 
 État : modèle documentaire structuré et renderer OOXML déterministe
-implémentés, avec deux documents témoins fictifs, sommaire, tableaux, figures et
-liens audio. Le schéma JSON cloud est validé localement. L’orchestrateur propose
-une simulation gratuite et un adaptateur OpenAI Responses désactivé par défaut,
-avec clé dans le Trousseau, plafond total bloquant, idempotence, reprises,
+implémentés et couverts par des tests de sommaire, tableaux, figures et liens
+audio. Le schéma JSON cloud est validé localement. L’orchestrateur et
+l’adaptateur OpenAI Responses sont conservés avec appels désactivés par défaut,
+clé dans le Trousseau, plafond total bloquant, idempotence, reprises,
 comptage des jetons et historique comparatif. Les essais réels des modèles et la
 recette visuelle finale sur Word macOS restent à réaliser avec l’utilisateur.
 
@@ -105,8 +97,8 @@ Jalon : aucune citation finale hors domaine autorisé dans les tests adversariau
 local de Scrib, rouverts et supprimés. Les DOCX sont extraits en conservant
 titres, paragraphes, listes, tableaux, ordre et nombre d’images ; les PDF sont
 extraits page par page, avec signalement des pages scannées ou vides. Les
-résultats et avertissements sont persistés et intégrés au pipeline de
-démonstration. Les formats Office historiques, présentations, tableurs, OCR des
+résultats et avertissements sont persistés pour les traitements réels. Les
+formats Office historiques, présentations, tableurs, OCR des
 scans et vérification scientifique bornée restent à réaliser. L’écran de revue
 de confidentialité applique déjà la détection locale, le masquage et
 l’approbation liée à la version exacte du texte.

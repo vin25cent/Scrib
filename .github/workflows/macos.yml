@@ -52,30 +52,30 @@ jobs:
         run: swift test --jobs 1 -Xswiftc -disable-batch-mode
 
       - name: Package the ad hoc signed alpha
-        run: bash Scripts/Package-MacApp.sh release artifacts Scrib-0.1.0-alpha.7-macOS
+        run: bash Scripts/Package-MacApp.sh release artifacts Scrib-0.1.0-alpha.8-macOS
 
       - name: Upload the alpha archive
         uses: actions/upload-artifact@v4
         with:
-          name: Scrib-0.1.0-alpha.7-macOS
+          name: Scrib-0.1.0-alpha.8-macOS
           path: |
-            artifacts/Scrib-0.1.0-alpha.7-macOS.zip
-            artifacts/Scrib-0.1.0-alpha.7-macOS.zip.sha256
+            artifacts/Scrib-0.1.0-alpha.8-macOS.zip
+            artifacts/Scrib-0.1.0-alpha.8-macOS.zip.sha256
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish the alpha.7 release
+      - name: Publish the alpha.8 release
         if: >-
           github.event_name == 'push' &&
           github.ref == 'refs/heads/main' &&
-          startsWith(github.event.head_commit.message, 'Release Scrib 0.1.0-alpha.7')
+          startsWith(github.event.head_commit.message, 'Release Scrib 0.1.0-alpha.8')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v0.1.0-alpha.7 \
-            artifacts/Scrib-0.1.0-alpha.7-macOS.zip \
-            artifacts/Scrib-0.1.0-alpha.7-macOS.zip.sha256 \
+          gh release create v0.1.0-alpha.8 \
+            artifacts/Scrib-0.1.0-alpha.8-macOS.zip \
+            artifacts/Scrib-0.1.0-alpha.8-macOS.zip.sha256 \
             --target "$GITHUB_SHA" \
-            --title "Scrib 0.1.0-alpha.7" \
-            --notes-file docs/RELEASE_NOTES_0.1.0_ALPHA.7.md \
+            --title "Scrib 0.1.0-alpha.8" \
+            --notes-file docs/RELEASE_NOTES_0.1.0_ALPHA.8.md \
             --prerelease

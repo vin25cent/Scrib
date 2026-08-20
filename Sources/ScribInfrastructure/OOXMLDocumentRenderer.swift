@@ -172,7 +172,7 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
         for item in document.metadata {
             result += "<w:p><w:pPr><w:pStyle w:val=\"Metadata\"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space=\"preserve\">\(escape(item.label)) : </w:t></w:r><w:r><w:t>\(escape(item.value))</w:t></w:r></w:p>"
         }
-        return result + paragraph("Document de démonstration généré localement par Scrib. Le contenu est fictif et ne constitue pas une référence médicale.", style: "Disclaimer")
+        return result
     }
 
     private func tableOfContents(_ sections: [CourseDocumentSection], includesSources: Bool) -> String {
@@ -262,7 +262,6 @@ public struct OOXMLDocumentRenderer: StructuredDocumentRendering, Sendable {
       <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="300" w:after="160"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="2E5AAC"/></w:rPr></w:style>
       <w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="540" w:hanging="270"/><w:spacing w:after="80"/></w:pPr></w:style>
       <w:style w:type="paragraph" w:styleId="Metadata"><w:name w:val="Metadata"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:after="40"/></w:pPr><w:rPr><w:sz w:val="20"/><w:color w:val="475467"/></w:rPr></w:style>
-      <w:style w:type="paragraph" w:styleId="Disclaimer"><w:name w:val="Disclaimer"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="180"/><w:shd w:val="clear" w:fill="EEF2FF"/><w:ind w:left="160" w:right="160"/></w:pPr><w:rPr><w:i/><w:sz w:val="18"/><w:color w:val="3448A4"/></w:rPr></w:style>
       <w:style w:type="paragraph" w:styleId="TOC1"><w:name w:val="toc 1"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="240"/><w:spacing w:after="60"/></w:pPr></w:style>
       <w:style w:type="paragraph" w:styleId="Source"><w:name w:val="Source"/><w:basedOn w:val="Normal"/><w:rPr><w:sz w:val="20"/></w:rPr></w:style>
       <w:style w:type="paragraph" w:styleId="TableCaption"><w:name w:val="Table Caption"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="120" w:after="80"/></w:pPr><w:rPr><w:b/><w:sz w:val="20"/></w:rPr></w:style>

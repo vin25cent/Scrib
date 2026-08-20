@@ -22,7 +22,6 @@ un MacBook Pro Apple Silicon M1 sous macOS 14 ou plus récent.
 - aucune clé API, aucun serveur local, Python, Homebrew ou ffmpeg externe ;
 - aucun audio ni texte envoyé pour la transcription ;
 - aucun appel IA cloud déclenché après l’ASR ;
-- pipeline de démonstration simulé et protections de confidentialité conservés ;
 - aucun modèle lourd téléchargé pendant les tests CI.
 
 ## Limites connues

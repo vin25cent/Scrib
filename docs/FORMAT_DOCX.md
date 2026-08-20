@@ -6,9 +6,9 @@ Le prototype transforme un `CourseDocument` validé en package Office Open XML
 local. Aucun modèle d'IA ne produit directement le fichier Word. Le renderer
 écrit son résultat de façon atomique via Foundation.
 
-Deux documents témoins fictifs sont générés par `ScribDocxPreview` : le cours
-complet et la fiche de révision. Ils servent à tester le package, les styles et
-la compatibilité Word ; ils ne constituent pas un contenu pédagogique.
+Les tests du renderer construisent des modèles documentaires isolés pour vérifier
+le package, les styles et la compatibilité Word sans exposer de générateur dans
+l’application.
 
 ## Système visuel
 
@@ -50,12 +50,6 @@ validée sur le Mac cible.
 - métadonnées auteur limitées à `Scrib` ;
 - même modèle structuré et même date de génération donnent exactement les mêmes
   octets.
-
-## Commande de génération
-
-```powershell
-swift run ScribDocxPreview Samples/Generated
-```
 
 La validation automatisée vérifie la signature ZIP, les parties OOXML
 obligatoires, le déterminisme, l'échappement XML et les horodatages. La validation

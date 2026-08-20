@@ -11,8 +11,7 @@ struct CourseWorkspaceTests {
           "originalFileName": "support.docx",
           "kind": "word",
           "byteCount": 42,
-          "importedAt": 0,
-          "isDemonstration": false
+          "importedAt": 0
         }
         """
 

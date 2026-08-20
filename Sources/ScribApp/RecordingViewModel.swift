@@ -16,7 +16,6 @@ final class RecordingViewModel: ObservableObject {
         case transcript = "Transcription"
         case supports = "Documents enseignant"
         case privacy = "Confidentialité"
-        case demonstration = "Démonstration"
         case settings = "Réglages"
 
         var id: String { rawValue }
@@ -30,7 +29,6 @@ final class RecordingViewModel: ObservableObject {
             case .transcript: "text.alignleft"
             case .supports: "doc.badge.plus"
             case .privacy: "hand.raised.fill"
-            case .demonstration: "sparkles.rectangle.stack"
             case .settings: "gearshape"
             }
         }
@@ -74,16 +72,9 @@ final class RecordingViewModel: ObservableObject {
     @Published private(set) var isLocalTranscriptionRunning = false
     @Published private(set) var supportDocuments: [SupportDocument] = []
     @Published private(set) var privacyReview: PrivacyReview?
-    @Published private(set) var isDemoMode = false
-    @Published private(set) var selectedDemoAudioURL: URL?
-    @Published private(set) var demonstrationPipelineResult: DemonstrationPipelineResult?
-    @Published private(set) var isDemonstrationPipelineRunning = false
     @Published private(set) var aiPreferences: AIGenerationPreferences
     @Published var aiAPIKeyDraft = ""
     @Published private(set) var aiHasStoredKey = false
-    @Published private(set) var aiGenerationRuns: [AIGenerationRun] = []
-    @Published private(set) var aiLastRun: AIGenerationRun?
-    @Published private(set) var isAIGenerationRunning = false
     @Published var workspaceNotice: String?
     @Published private(set) var systemConditions = SystemConditionSnapshot(
         isOnExternalPower: false,
@@ -98,9 +89,7 @@ final class RecordingViewModel: ObservableObject {
     private let fileStore: any CourseFileStoring
     private let teacherStore: any TeacherAuthorizationStoring
     private let queueCoordinator: ProcessingQueueCoordinator
-    private let demonstrationPipeline: any DemonstrationPipelineRunning
     private let supportImporter: any SupportDocumentImporting
-    private let aiOrchestrator: StructuredGenerationOrchestrator
     private let aiSecretStore: any AISecretStoring
     private let aiPreferencesStore: any AIGenerationPreferencesStoring
     private let transcriptionCoordinator: LocalTranscriptionCoordinator
@@ -109,7 +98,6 @@ final class RecordingViewModel: ObservableObject {
     private let transcriptService = TranscriptWorkspaceService()
     private let privacyDetector = PatientIdentifierDetector()
     private let privacyGate = CloudPrivacyGate()
-    private let demonstrationFactory = DemonstrationWorkspaceFactory()
     private var pendingTeacher: Teacher?
     private var pollingTask: Task<Void, Never>?
     private var queuePollingTask: Task<Void, Never>?
@@ -124,9 +112,7 @@ final class RecordingViewModel: ObservableObject {
         fileStore: any CourseFileStoring,
         teacherStore: any TeacherAuthorizationStoring,
         queueCoordinator: ProcessingQueueCoordinator,
-        demonstrationPipeline: any DemonstrationPipelineRunning,
         supportImporter: any SupportDocumentImporting,
-        aiOrchestrator: StructuredGenerationOrchestrator,
         aiSecretStore: any AISecretStoring,
         aiPreferencesStore: any AIGenerationPreferencesStoring,
         transcriptionCoordinator: LocalTranscriptionCoordinator,
@@ -136,9 +122,7 @@ final class RecordingViewModel: ObservableObject {
         self.fileStore = fileStore
         self.teacherStore = teacherStore
         self.queueCoordinator = queueCoordinator
-        self.demonstrationPipeline = demonstrationPipeline
         self.supportImporter = supportImporter
-        self.aiOrchestrator = aiOrchestrator
         self.aiSecretStore = aiSecretStore
         self.aiPreferencesStore = aiPreferencesStore
         self.transcriptionCoordinator = transcriptionCoordinator
@@ -150,7 +134,7 @@ final class RecordingViewModel: ObservableObject {
         self.savedTeachers = teacherStore.teachers()
         self.supportDocuments = supportImporter.documents()
         self.errorMessage = startupWarning
-        Task { await refreshAIState() }
+        Task { await refreshAIKeyStatus() }
         Task {
             await refreshLocalModelStatus()
             await restoreLatestLocalTranscription()
@@ -210,6 +194,18 @@ final class RecordingViewModel: ObservableObject {
         capturedSegments.reduce(0) { $0 + $1.duration }
     }
 
+    var localTranscriptionForExport: StoredLocalTranscription? {
+        guard let currentCourse, let lastLocalTranscriptionResult, let realTranscriptDraft else {
+            return nil
+        }
+        return StoredLocalTranscription(
+            course: currentCourse,
+            recordingSegments: capturedSegments,
+            result: lastLocalTranscriptionResult,
+            draft: realTranscriptDraft
+        )
+    }
+
     var canStartLocalTranscription: Bool {
         currentCourse != nil
             && !capturedSegments.isEmpty
@@ -249,22 +245,6 @@ final class RecordingViewModel: ObservableObject {
     var selectedAIModelProfile: AIModelProfile {
         AIModelCatalog.profile(id: aiPreferences.selectedModelProfileID)
             ?? AIModelCatalog.profiles[0]
-    }
-
-    var aiSpentUSD: Double {
-        aiGenerationRuns.filter { !$0.usage.isSimulated }
-            .map(\.usage.estimatedCostUSD)
-            .reduce(0, +)
-    }
-
-    var aiBudgetRemainingUSD: Double {
-        max(aiPreferences.trialBudgetUSD - aiSpentUSD, 0)
-    }
-
-    var aiCanRunTrial: Bool {
-        isDemoMode && isPrivacyApproved && !isAIGenerationRunning
-            && (!selectedAIModelProfile.isLive
-                || (aiPreferences.liveRequestsEnabled && aiHasStoredKey))
     }
 
     private var privacyContent: String {
@@ -314,13 +294,10 @@ final class RecordingViewModel: ObservableObject {
         transcriptDraft.updatedAt = Date()
         self.transcriptDraft = transcriptDraft
         persistRealTranscriptIfNeeded(transcriptDraft)
-        workspaceNotice = transcriptDraft.isDemonstration
-            ? "Modification conservée pour cette session de démonstration."
-            : "Transcription enregistrée localement."
+        workspaceNotice = "Transcription enregistrée localement."
     }
 
     private func persistRealTranscriptIfNeeded(_ draft: TranscriptDraft) {
-        guard !draft.isDemonstration else { return }
         realTranscriptDraft = draft
         Task {
             do {
@@ -402,7 +379,7 @@ final class RecordingViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 lastLocalTranscriptionResult = stored.result
                 realTranscriptDraft = stored.draft
-                if !isDemoMode { transcriptDraft = stored.draft }
+                transcriptDraft = stored.draft
                 workspaceNotice = "Transcription brute terminée et enregistrée localement."
             } catch is CancellationError {
                 localTranscriptionProgress.stage = .cancelled
@@ -425,7 +402,6 @@ final class RecordingViewModel: ObservableObject {
 
     func openRawTranscriptInEditor() {
         guard realTranscriptDraft != nil else { return }
-        if isDemoMode { deactivateDemonstrationMode() }
         transcriptDraft = realTranscriptDraft
         selectedSection = .transcript
     }
@@ -474,7 +450,6 @@ final class RecordingViewModel: ObservableObject {
 
     func deleteAIAPIKey() {
         let provider = selectedAIModelProfile.provider
-        guard provider != .simulated else { return }
         Task { @MainActor in
             do {
                 try await aiSecretStore.deleteSecret(for: provider)
@@ -489,65 +464,8 @@ final class RecordingViewModel: ObservableObject {
         }
     }
 
-    func runAIModelTrial() {
-        guard !isAIGenerationRunning else { return }
-        guard let transcriptDraft, transcriptDraft.isDemonstration else {
-            activateDemonstrationMode()
-            workspaceNotice = "Données fictives chargées. Vérifiez maintenant la confidentialité avant l’essai."
-            selectedSection = .privacy
-            return
-        }
-        guard isPrivacyApproved else {
-            workspaceNotice = "L’essai attend la validation de confidentialité de cette version."
-            selectedSection = .privacy
-            return
-        }
-        let teacher = Teacher(
-            name: "Enseignant Démo",
-            recordingAuthorizationConfirmedAt: Date()
-        )
-        let unit = TeachingUnitCatalog.units(for: .semester1).first { $0.code == "2.11" }!
-        let course = Course(
-            id: transcriptDraft.courseID,
-            semester: .semester1,
-            teachingUnit: unit,
-            title: transcriptDraft.courseTitle,
-            teacher: teacher,
-            expectedDuration: .oneHour
-        )
-        let request = AIGenerationRequest(
-            course: course,
-            transcript: transcriptDraft,
-            supportExtractions: supportDocuments.compactMap(\.extraction),
-            privacyReview: privacyReview,
-            modelProfile: selectedAIModelProfile,
-            preferences: aiPreferences
-        )
-        isAIGenerationRunning = true
-        workspaceNotice = selectedAIModelProfile.isLive
-            ? "Essai API en cours…"
-            : "Simulation structurée en cours…"
-        Task { @MainActor in
-            defer { isAIGenerationRunning = false }
-            do {
-                let run = try await aiOrchestrator.run(request)
-                aiLastRun = run
-                aiGenerationRuns = try await aiOrchestrator.runs()
-                workspaceNotice = "Essai validé : deux documents structurés, coût estimé \(formatUSDCost(run.usage.estimatedCostUSD))."
-            } catch {
-                errorMessage = "L’essai IA a échoué : \(error.localizedDescription)"
-            }
-        }
-    }
-
-    func formatUSDCost(_ value: Double) -> String {
-        value.formatted(.currency(code: "USD").precision(.fractionLength(0...4)))
-    }
-
     func jumpToAudio(at seconds: TimeInterval) {
-        workspaceNotice = isDemoMode
-            ? "Aperçu audio simulé à \(formatTimestamp(seconds)). Aucun fichier audio n’est utilisé."
-            : "Position audio sélectionnée : \(formatTimestamp(seconds))."
+        workspaceNotice = "Position audio sélectionnée : \(formatTimestamp(seconds))."
     }
 
     func approvePrivacyReview() {
@@ -585,7 +503,6 @@ final class RecordingViewModel: ObservableObject {
         do {
             let document = try supportImporter.importDocument(from: url)
             supportDocuments = supportImporter.documents()
-                + supportDocuments.filter(\.isDemonstration)
             workspaceNotice = "\(document.originalFileName) a été copié dans Scrib."
         } catch {
             errorMessage = "Le document n’a pas pu être importé : \(error.localizedDescription)"
@@ -594,9 +511,7 @@ final class RecordingViewModel: ObservableObject {
 
     func deleteSupportDocument(_ document: SupportDocument) {
         do {
-            if !document.isDemonstration {
-                try supportImporter.deleteDocument(id: document.id)
-            }
+            try supportImporter.deleteDocument(id: document.id)
             supportDocuments.removeAll { $0.id == document.id }
         } catch {
             errorMessage = "Le document n’a pas pu être supprimé : \(error.localizedDescription)"
@@ -605,149 +520,15 @@ final class RecordingViewModel: ObservableObject {
 
     func openSupportDocument(_ document: SupportDocument) {
         guard let localURL = document.localURL else {
-            workspaceNotice = "Le document fictif n’ouvre aucun fichier réel."
+            workspaceNotice = "Le fichier local de ce document est indisponible."
             return
         }
         NSWorkspace.shared.open(localURL)
     }
 
-    func selectDemonstrationAudio() {
-        let panel = NSOpenPanel()
-        panel.title = "Choisir l’audio public de démonstration"
-        panel.message = "Sélectionnez vaccination.wav ou medicaments.wav téléchargé par le script Scrib."
-        panel.prompt = "Utiliser cet audio"
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.wav, .audio]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        selectedDemoAudioURL = url
-        demonstrationPipelineResult = nil
-        workspaceNotice = "Audio sélectionné : \(url.lastPathComponent)"
-    }
-
-    func runDemonstrationPipeline() {
-        guard !isDemonstrationPipelineRunning else { return }
-        guard let transcriptDraft, transcriptDraft.isDemonstration else {
-            errorMessage = "Activez d’abord le mode démonstration."
-            return
-        }
-        guard let selectedDemoAudioURL else {
-            selectDemonstrationAudio()
-            return
-        }
-
-        let teacher = Teacher(
-            name: "Enseignant Démo",
-            recordingAuthorizationConfirmedAt: Date()
-        )
-        let unit = TeachingUnitCatalog.units(for: .semester1).first { $0.code == "2.11" }!
-        let course = Course(
-            id: transcriptDraft.courseID,
-            semester: .semester1,
-            teachingUnit: unit,
-            title: transcriptDraft.courseTitle,
-            teacher: teacher,
-            expectedDuration: .oneHour
-        )
-        let audioMetadata = demonstrationAudioMetadata(for: selectedDemoAudioURL)
-        let request = DemonstrationPipelineRequest(
-            course: course,
-            audioURL: selectedDemoAudioURL,
-            audioAttribution: audioMetadata.attribution,
-            audioLandingURL: audioMetadata.landingURL,
-            transcript: transcriptDraft,
-            privacyReview: privacyReview,
-            supportExtractions: supportDocuments.compactMap(\.extraction)
-        )
-
-        isDemonstrationPipelineRunning = true
-        workspaceNotice = "Pipeline local en cours…"
-        Task { @MainActor in
-            defer { isDemonstrationPipelineRunning = false }
-            do {
-                demonstrationPipelineResult = try await demonstrationPipeline.run(request)
-                await reloadQueue()
-                workspaceNotice = "Pipeline terminé : supports extraits et deux documents Word prêts."
-            } catch let issue as DemonstrationPipelineError {
-                await reloadQueue()
-                switch issue {
-                case .privacyApprovalRequired:
-                    workspaceNotice = "Pipeline suspendu : vérifiez les alertes de confidentialité."
-                    selectedSection = .privacy
-                case .missingArtifact:
-                    errorMessage = issue.localizedDescription
-                }
-            } catch {
-                await reloadQueue()
-                errorMessage = "Le pipeline de démonstration a échoué : \(error.localizedDescription)"
-            }
-        }
-    }
-
-    func revealDemonstrationArtifact(_ url: URL) {
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-    }
-
-    func activateDemonstrationMode() {
-        if transcriptDraft?.isDemonstration == false { realTranscriptDraft = transcriptDraft }
-        isDemoMode = true
-        transcriptDraft = demonstrationFactory.transcript()
-        privacyReview = nil
-        if !supportDocuments.contains(where: \.isDemonstration) {
-            supportDocuments.insert(demonstrationFactory.supportDocument(), at: 0)
-        }
-        transcriptSearch = ""
-        transcriptFilter = .all
-        workspaceNotice = "Démonstration locale chargée : aucune donnée réelle et aucun appel réseau."
-        selectedSection = .transcript
-    }
-
-    func deactivateDemonstrationMode() {
-        let demonstrationCourseID = transcriptDraft?.isDemonstration == true
-            ? transcriptDraft?.courseID
-            : nil
-        isDemoMode = false
-        if transcriptDraft?.isDemonstration == true {
-            transcriptDraft = realTranscriptDraft
-        }
-        supportDocuments.removeAll(where: \.isDemonstration)
-        privacyReview = nil
-        selectedDemoAudioURL = nil
-        demonstrationPipelineResult = nil
-        workspaceNotice = "Données de démonstration retirées."
-        selectedSection = .demonstration
-        if let demonstrationCourseID {
-            Task { @MainActor in
-                try? await demonstrationPipeline.reset(courseID: demonstrationCourseID)
-                await reloadQueue()
-            }
-        }
-    }
-
     func formatTimestamp(_ seconds: TimeInterval) -> String {
         let total = max(Int(seconds), 0)
         return String(format: "%02d:%02d", total / 60, total % 60)
-    }
-
-    private func demonstrationAudioMetadata(for url: URL) -> (attribution: String, landingURL: URL?) {
-        let normalized = url.lastPathComponent.folding(
-            options: [.caseInsensitive, .diacriticInsensitive],
-            locale: .current
-        )
-        if normalized.contains("medicament") {
-            return (
-                "CRSN — Régularité des prises de médicaments — CC BY-SA 4.0",
-                URL(string: "https://commons.wikimedia.org/wiki/File:Fran%C3%A7ais_-_R%C3%A9gularit%C3%A9_des_prises_de_m%C3%A9dicaments.wav")
-            )
-        }
-        if normalized.contains("vaccination") {
-            return (
-                "CRSN — Les avantages de la vaccination — CC BY-SA 4.0",
-                URL(string: "https://commons.wikimedia.org/wiki/File:Fran%C3%A7ais_-_les_avantages_de_la_vaccination.wav")
-            )
-        }
-        return ("Audio local choisi par l’utilisateur — démonstration", nil)
     }
 
     var menuBarSystemImage: String {
@@ -815,11 +596,6 @@ final class RecordingViewModel: ObservableObject {
     }
 
     func retry(_ job: ProcessingJob) {
-        if isDemoMode, transcriptDraft?.courseID == job.courseID {
-            selectedSection = .demonstration
-            runDemonstrationPipeline()
-            return
-        }
         Task {
             do {
                 try await queueCoordinator.retry(jobID: job.id)
@@ -1051,7 +827,7 @@ final class RecordingViewModel: ObservableObject {
             capturedSegments = stored.recordingSegments
             lastLocalTranscriptionResult = stored.result
             realTranscriptDraft = stored.draft
-            if !isDemoMode { transcriptDraft = stored.draft }
+            transcriptDraft = stored.draft
             snapshot = AudioRecorderSnapshot(
                 state: .finished,
                 elapsed: stored.recordingSegments.reduce(0) { $0 + $1.duration },
@@ -1062,22 +838,8 @@ final class RecordingViewModel: ObservableObject {
         }
     }
 
-    private func refreshAIState() async {
-        do {
-            aiGenerationRuns = try await aiOrchestrator.runs()
-            aiLastRun = aiGenerationRuns.first
-            await refreshAIKeyStatus()
-        } catch {
-            errorMessage = "Les réglages IA n’ont pas pu être chargés : \(error.localizedDescription)"
-        }
-    }
-
     private func refreshAIKeyStatus() async {
         let provider = selectedAIModelProfile.provider
-        guard provider != .simulated else {
-            aiHasStoredKey = false
-            return
-        }
         do {
             aiHasStoredKey = try await aiSecretStore.hasSecret(for: provider)
         } catch {

@@ -1,6 +1,8 @@
+import AppKit
 import Foundation
 import ScribDomain
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct LocalTranscriptionView: View {
     @ObservedObject var model: RecordingViewModel
@@ -301,6 +303,7 @@ private struct LocalTranscriptionResultCard: View {
                 model.openRawTranscriptInEditor()
             }
             .buttonStyle(.borderedProminent)
+            LocalTranscriptionExportMenu(model: model)
         }
         .scribCard()
     }
@@ -308,6 +311,76 @@ private struct LocalTranscriptionResultCard: View {
     private var realtimeFactorText: String {
         guard let value = result.metrics.realtimeFactor else { return "Non mesuré" }
         return String(format: "%.2f×", value)
+    }
+
+}
+
+struct LocalTranscriptionExportMenu: View {
+    @ObservedObject var model: RecordingViewModel
+
+    var body: some View {
+        Menu("Exporter la transcription") {
+            Button("Format texte (.txt)") {
+                export(.plainText)
+            }
+            Button("Format JSON (.json)") {
+                export(.json)
+            }
+        }
+        .menuStyle(.borderedButton)
+        .disabled(model.localTranscriptionForExport == nil)
+    }
+
+    private func export(_ format: ExportFormat) {
+        guard let transcription = model.localTranscriptionForExport else { return }
+
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(safeFileName(transcription.course.title)) - transcription.\(format.fileExtension)"
+        panel.allowedContentTypes = [format.contentType]
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+
+        do {
+            let data: Data
+            switch format {
+            case .plainText:
+                data = Data(LocalTranscriptionExport.plainText(from: transcription).utf8)
+            case .json:
+                data = try LocalTranscriptionExport.jsonData(from: transcription)
+            }
+            try data.write(to: destination, options: .atomic)
+            model.workspaceNotice = "Transcription exportée dans \(destination.lastPathComponent)."
+        } catch {
+            model.errorMessage = "L’export de la transcription a échoué : \(error.localizedDescription)"
+        }
+    }
+
+    private func safeFileName(_ title: String) -> String {
+        title
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: "\0", with: "-")
+    }
+
+    private enum ExportFormat {
+        case plainText
+        case json
+
+        var fileExtension: String {
+            switch self {
+            case .plainText: "txt"
+            case .json: "json"
+            }
+        }
+
+        var contentType: UTType {
+            switch self {
+            case .plainText: .plainText
+            case .json: .json
+            }
+        }
     }
 }
 

@@ -4,8 +4,7 @@ import PackageDescription
 
 var products: [Product] = [
     .library(name: "ScribDomain", targets: ["ScribDomain"]),
-    .library(name: "ScribApplication", targets: ["ScribApplication"]),
-    .executable(name: "ScribDocxPreview", targets: ["ScribDocxPreview"])
+    .library(name: "ScribApplication", targets: ["ScribApplication"])
 ]
 
 var infrastructureDependencies: [Target.Dependency] = [
@@ -45,10 +44,6 @@ var targets: [Target] = [
             .linkedFramework("SwiftData", .when(platforms: [.macOS])),
             .linkedFramework("UserNotifications", .when(platforms: [.macOS]))
         ]
-    ),
-    .executableTarget(
-        name: "ScribDocxPreview",
-        dependencies: ["ScribDomain", "ScribInfrastructure"]
     ),
     .testTarget(
         name: "ScribDomainTests",

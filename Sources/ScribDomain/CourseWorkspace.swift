@@ -51,7 +51,6 @@ public struct TranscriptDraft: Equatable, Codable, Sendable {
     public var passages: [TranscriptPassage]
     public var version: Int
     public var updatedAt: Date
-    public var isDemonstration: Bool
     public var transcriptionEngine: TranscriptionEngineDescriptor?
     public var transcriptionModelID: LocalTranscriptionModelID?
     public var rawTranscriptionCompletedAt: Date?
@@ -63,7 +62,6 @@ public struct TranscriptDraft: Equatable, Codable, Sendable {
         passages: [TranscriptPassage] = [],
         version: Int = 1,
         updatedAt: Date = Date(),
-        isDemonstration: Bool = false,
         transcriptionEngine: TranscriptionEngineDescriptor? = nil,
         transcriptionModelID: LocalTranscriptionModelID? = nil,
         rawTranscriptionCompletedAt: Date? = nil
@@ -74,7 +72,6 @@ public struct TranscriptDraft: Equatable, Codable, Sendable {
         self.passages = passages
         self.version = max(version, 1)
         self.updatedAt = updatedAt
-        self.isDemonstration = isDemonstration
         self.transcriptionEngine = transcriptionEngine
         self.transcriptionModelID = transcriptionModelID
         self.rawTranscriptionCompletedAt = rawTranscriptionCompletedAt
@@ -204,7 +201,6 @@ public struct SupportDocument: Identifiable, Equatable, Codable, Sendable {
     public var kind: SupportDocumentKind
     public var byteCount: Int64
     public var importedAt: Date
-    public var isDemonstration: Bool
     public var extraction: SupportDocumentExtraction?
     public var extractionFailure: String?
 
@@ -215,7 +211,6 @@ public struct SupportDocument: Identifiable, Equatable, Codable, Sendable {
         kind: SupportDocumentKind,
         byteCount: Int64,
         importedAt: Date = Date(),
-        isDemonstration: Bool = false,
         extraction: SupportDocumentExtraction? = nil,
         extractionFailure: String? = nil
     ) {
@@ -225,7 +220,6 @@ public struct SupportDocument: Identifiable, Equatable, Codable, Sendable {
         self.kind = kind
         self.byteCount = max(byteCount, 0)
         self.importedAt = importedAt
-        self.isDemonstration = isDemonstration
         self.extraction = extraction
         self.extractionFailure = extractionFailure
     }

@@ -1,17 +1,17 @@
-# Génération IA et banc d’essai
+# Génération IA
 
 ## État sûr par défaut
 
-Scrib démarre sur `Simulation Scrib — gratuit`. La simulation reçoit les données
-fictives, produit le contrat `1.0`, passe par le validateur réel et ne crée aucune
-connexion réseau. Sélectionner un modèle réel ne suffit pas à lancer un appel :
+L’infrastructure de génération structurée est conservée, mais aucun déclencheur
+n’envoie actuellement la transcription ou les supports depuis l’interface.
+Configurer un modèle ne suffit pas à lancer un appel :
 
 1. une clé doit être enregistrée dans le Trousseau macOS ;
 2. les appels payants doivent être activés explicitement ;
 3. la version exacte de la transcription et des supports doit avoir passé la
    revue de confidentialité ;
 4. le coût maximal projeté doit tenir dans le budget restant ;
-5. seul le bouton « Tester ce modèle » déclenche la requête.
+5. un futur parcours de génération réel devra fournir une action explicite.
 
 Le plafond opérationnel initial est de 8 USD pour garder une marge sous
 l’enveloppe globale de 10 €. Le taux de change et les taxes devront être vérifiés
@@ -45,12 +45,12 @@ sont d’abord décodées, vérifiées contre le contrat `1.0`, validées séman
 et converties en modèles documentaires locaux. Une réponse mal formée, une source
 non autorisée ou un horodatage obligatoire absent est rejeté.
 
-## Procédure prévue au retour sur le Mac
+## Procédure prévue avant activation
 
-1. lancer la simulation et contrôler le parcours complet ;
-2. créer ou sélectionner un projet API séparé avec une limite fournisseur ;
-3. enregistrer la clé dans Scrib, sans la copier dans un fichier ;
-4. confirmer les prix et le budget opérationnel ;
-5. tester Luna, Terra puis Sol sur le même jeu fictif ;
-6. comparer validité, contenu, durée, jetons et coût avant de retenir un modèle ;
-7. supprimer la clé du Trousseau à la fin si les essais sont terminés.
+1. raccorder l’orchestrateur au parcours réel de cours ;
+2. vérifier que seuls la transcription et les supports explicitement sélectionnés
+   sont inclus ;
+3. créer ou sélectionner un projet API séparé avec une limite fournisseur ;
+4. confirmer les prix, le budget et la revue de confidentialité ;
+5. valider la sortie structurée et le rendu Word sur le Mac cible ;
+6. supprimer la clé du Trousseau à la fin si les essais sont terminés.

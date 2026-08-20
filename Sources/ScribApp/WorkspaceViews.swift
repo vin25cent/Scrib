@@ -2,29 +2,6 @@ import ScribApplication
 import ScribDomain
 import SwiftUI
 
-struct DemonstrationBanner: View {
-    @ObservedObject var model: RecordingViewModel
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "sparkles")
-            Text("Mode démonstration — données entièrement fictives, traitement hors ligne")
-                .font(.caption.weight(.semibold))
-            Spacer()
-            Button("Quitter") { model.deactivateDemonstrationMode() }
-                .buttonStyle(.plain)
-                .font(.caption.weight(.semibold))
-        }
-        .foregroundStyle(ScribDesign.accentDark)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 9)
-        .background(ScribDesign.accent.opacity(0.09))
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(ScribDesign.border).frame(height: 1)
-        }
-    }
-}
-
 struct TranscriptEditorView: View {
     @ObservedObject var model: RecordingViewModel
 
@@ -35,9 +12,7 @@ struct TranscriptEditorView: View {
                 WorkspaceEmptyState(
                     title: "Aucune transcription disponible",
                     message: "Une transcription apparaîtra ici après le traitement local d’un cours.",
-                    systemImage: "text.alignleft",
-                    actionTitle: "Charger la démonstration",
-                    action: model.activateDemonstrationMode
+                    systemImage: "text.alignleft"
                 )
             } else {
                 toolbar
@@ -107,6 +82,7 @@ struct TranscriptEditorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            LocalTranscriptionExportMenu(model: model)
         }
         .padding(.horizontal, 32)
         .padding(.bottom, 18)
@@ -280,18 +256,8 @@ struct SupportDocumentsView: View {
                             .frame(width: 48, height: 48)
                             .background(ScribDesign.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 13))
                         VStack(alignment: .leading, spacing: 5) {
-                            HStack(spacing: 8) {
-                                Text(document.originalFileName)
-                                    .font(.headline)
-                                if document.isDemonstration {
-                                    Text("DÉMO")
-                                        .font(.caption2.bold())
-                                        .foregroundStyle(ScribDesign.accent)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 3)
-                                        .background(ScribDesign.accent.opacity(0.09), in: Capsule())
-                                }
-                            }
+                            Text(document.originalFileName)
+                                .font(.headline)
                             Text("Importé le \(document.importedAt.formatted(date: .abbreviated, time: .shortened)) · \(ByteCountFormatter.string(fromByteCount: document.byteCount, countStyle: .file))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -355,9 +321,7 @@ struct SupportDocumentsView: View {
                 .foregroundStyle(.orange)
         } else {
             Label(
-                document.isDemonstration
-                    ? "Document fictif, aucun fichier réel"
-                    : "Copie locale conservée · extraction non requise",
+                "Copie locale conservée · extraction non requise",
                 systemImage: "checkmark.circle.fill"
             )
             .font(.caption)
@@ -386,9 +350,7 @@ struct PrivacyReviewView: View {
                 WorkspaceEmptyState(
                     title: "Aucun texte à vérifier",
                     message: "La vérification locale sera disponible dès qu’une transcription aura été produite.",
-                    systemImage: "hand.raised.fill",
-                    actionTitle: "Charger la démonstration",
-                    action: model.activateDemonstrationMode
+                    systemImage: "hand.raised.fill"
                 )
             } else {
                 ScrollView {
@@ -553,218 +515,27 @@ struct PrivacyReviewView: View {
     }
 }
 
-struct DemonstrationModeView: View {
-    @ObservedObject var model: RecordingViewModel
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Mode démonstration hors ligne")
-                        .font(.system(size: 30, weight: .semibold))
-                    Text("Explore Scrib sans enregistrement, sans document personnel et sans connexion Internet.")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 16) {
-                    demoFeature("Transcription", detail: "5 passages fictifs modifiables", icon: "text.alignleft")
-                    demoFeature("Confidentialité", detail: "Alertes synthétiques et masquées", icon: "hand.raised.fill")
-                    demoFeature("Support", detail: "Document Word virtuel", icon: "doc.text.fill")
-                }
-
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 14) {
-                        Image(systemName: "network.slash")
-                            .font(.title2)
-                            .foregroundStyle(ScribDesign.accent)
-                            .frame(width: 48, height: 48)
-                            .background(ScribDesign.accent.opacity(0.09), in: Circle())
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Garantie de démonstration")
-                                .font(.headline)
-                            Text("Les exemples sont intégrés à l’application et aucun moteur lourd ni service distant n’est appelé.")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    Divider()
-                    Label("Données explicitement marquées DÉMO", systemImage: "checkmark.circle.fill")
-                    Label("Uniquement un audio public choisi localement", systemImage: "checkmark.circle.fill")
-                    Label("Aucun coût API", systemImage: "checkmark.circle.fill")
-                    Label("Réinitialisation immédiate en quittant le mode", systemImage: "checkmark.circle.fill")
-                }
-                .foregroundStyle(ScribDesign.success)
-                .scribCard()
-
-                if model.isDemoMode {
-                    pipelineCard
-                }
-
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(model.isDemoMode ? "La démonstration est active" : "Prêt à explorer Scrib")
-                            .font(.title3.weight(.semibold))
-                        Text(model.isDemoMode ? "Les données fictives sont chargées dans les écrans Contenu." : "Le chargement ne modifie aucun cours réel.")
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if model.isDemoMode {
-                        Button("Réinitialiser et quitter") { model.deactivateDemonstrationMode() }
-                            .buttonStyle(.bordered)
-                    } else {
-                        Button("Lancer la démonstration") { model.activateDemonstrationMode() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-                    }
-                }
-                .scribCard()
-            }
-            .padding(36)
-            .frame(maxWidth: 1_000, alignment: .leading)
-        }
-        .background(ScribDesign.canvas)
-        .navigationTitle("Démonstration")
-        .overlay(alignment: .bottomTrailing) { WorkspaceNotice(model: model) }
-    }
-
-    private var pipelineCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ScribSectionHeading(
-                "Pipeline complet",
-                subtitle: "Audio local → transcription simulée → confidentialité → deux documents Word",
-                icon: "point.3.connected.trianglepath.dotted"
-            )
-
-            pipelineStep(
-                number: 1,
-                title: "Audio public",
-                detail: model.selectedDemoAudioURL?.lastPathComponent ?? "Aucun WAV sélectionné",
-                isComplete: model.selectedDemoAudioURL != nil
-            ) {
-                Button(model.selectedDemoAudioURL == nil ? "Choisir le WAV" : "Changer") {
-                    model.selectDemonstrationAudio()
-                }
-            }
-
-            pipelineStep(
-                number: 2,
-                title: "Confidentialité",
-                detail: model.isPrivacyApproved
-                    ? "Version exacte vérifiée"
-                    : "Une alerte fictive doit être vérifiée",
-                isComplete: model.isPrivacyApproved
-            ) {
-                Button(model.isPrivacyApproved ? "Revoir" : "Vérifier") {
-                    model.selectedSection = .privacy
-                }
-            }
-
-            pipelineStep(
-                number: 3,
-                title: "Traitement local",
-                detail: model.demonstrationPipelineResult == nil
-                    ? "Six checkpoints et génération DOCX"
-                    : "Pipeline terminé avec succès",
-                isComplete: model.demonstrationPipelineResult != nil
-            ) {
-                if model.isDemonstrationPipelineRunning {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Button("Exécuter") { model.runDemonstrationPipeline() }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(model.selectedDemoAudioURL == nil || !model.isPrivacyApproved)
-                }
-            }
-
-            if let result = model.demonstrationPipelineResult {
-                Divider()
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Résultats")
-                        .font(.headline)
-                    artifactRow("Cours complet", url: result.fullCourseURL, icon: "doc.text.fill")
-                    artifactRow("Fiche de révision", url: result.revisionSheetURL, icon: "list.bullet.rectangle.fill")
-                    artifactRow("Transcription persistée", url: result.transcriptURL, icon: "text.alignleft")
-                    artifactRow("Contexte des supports", url: result.supportContextURL, icon: "doc.badge.gearshape")
-                }
-            }
-        }
-        .scribCard()
-    }
-
-    private func pipelineStep<Actions: View>(
-        number: Int,
-        title: String,
-        detail: String,
-        isComplete: Bool,
-        @ViewBuilder actions: () -> Actions
-    ) -> some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(isComplete ? ScribDesign.success.opacity(0.12) : ScribDesign.accent.opacity(0.09))
-                if isComplete {
-                    Image(systemName: "checkmark")
-                        .font(.caption.bold())
-                        .foregroundStyle(ScribDesign.success)
-                } else {
-                    Text("\(number)")
-                        .font(.caption.bold())
-                        .foregroundStyle(ScribDesign.accent)
-                }
-            }
-            .frame(width: 32, height: 32)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            actions()
-        }
-        .padding(12)
-        .background(ScribDesign.canvas.opacity(0.55), in: RoundedRectangle(cornerRadius: 11))
-    }
-
-    private func artifactRow(_ title: String, url: URL, icon: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .foregroundStyle(ScribDesign.accent)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.subheadline.weight(.semibold))
-                Text(url.lastPathComponent)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Afficher") { model.revealDemonstrationArtifact(url) }
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func demoFeature(_ title: String, detail: String, icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(ScribDesign.accent)
-            Text(title).font(.headline)
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, minHeight: 105, alignment: .leading)
-        .scribCard(padding: 18)
-    }
-}
 
 private struct WorkspaceEmptyState: View {
     let title: String
     let message: String
     let systemImage: String
-    let actionTitle: String
-    let action: () -> Void
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    init(
+        title: String,
+        message: String,
+        systemImage: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.message = message
+        self.systemImage = systemImage
+        self.actionTitle = actionTitle
+        self.action = action
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -779,9 +550,11 @@ private struct WorkspaceEmptyState: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
-            Button(actionTitle, action: action)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)

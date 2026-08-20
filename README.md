@@ -21,9 +21,9 @@ payants sont désactivés par défaut.
 - [Format DOCX déterministe](docs/FORMAT_DOCX.md)
 - [Contrat JSON de génération](docs/STRUCTURED_GENERATION.md)
 - [Barrière locale de confidentialité](docs/PRIVACY_GATE.md)
-- [Génération IA et banc d’essai](docs/AI_GENERATION.md)
+- [Génération IA](docs/AI_GENERATION.md)
 - [Installer l’alpha sur macOS](docs/INSTALLATION_ALPHA_MACOS.md)
-- [Notes de version 0.1.0-alpha.7](docs/RELEASE_NOTES_0.1.0_ALPHA.7.md)
+- [Notes de version 0.1.0-alpha.8](docs/RELEASE_NOTES_0.1.0_ALPHA.8.md)
 
 ## Structure
 
@@ -73,16 +73,6 @@ empreinte SHA-256. L’application porte une signature ad hoc vérifiée pendant
 build ; elle n’est pas notarée et macOS demandera donc une autorisation manuelle
 au premier lancement.
 
-### Audios publics de démonstration
-
-Deux courts messages médicaux français sous licence CC BY-SA 4.0 sont référencés
-dans `Benchmarks/DemoAudio/sources.json`. Ils ne sont pas stockés dans Git et se
-téléchargent localement avec contrôle SHA-256 :
-
-```powershell
-.\Scripts\Download-DemoAudio.ps1
-```
-
 ## État du projet
 
 - dépôt Git local initialisé ;
@@ -91,7 +81,7 @@ téléchargent localement avec contrôle SHA-256 :
 - formulaire et référentiel des 61 UE intégrés ;
 - autorisation d'enregistrer mémorisée par enseignant ;
 - moteur AVFoundation AAC mono, vu-mètre, pause/reprise et segments récupérables
-  intégrés, en attente de validation sur le microphone du MacBook ;
+  intégrés et validés sur le microphone du Mac cible ;
 - file FIFO persistée avec SwiftData, checkpoints, reprise après interruption et
   anti-doublon ;
 - tableau de bord de suivi avec filtres, compteurs, détail d’un cours, progression
@@ -102,13 +92,9 @@ téléchargent localement avec contrôle SHA-256 :
   image, avec rejet des documents déjà générés par Scrib ;
 - extraction locale des DOCX (titres, paragraphes, listes, tableaux et repères
   d’images) et des PDF (texte page par page et pages scannées signalées), avec
-  résultat persisté et injecté dans le pipeline de démonstration ;
+  résultat persisté pour les traitements réels ;
 - écran de confidentialité avec aperçus masqués et approbation manuelle liée à
   l’empreinte exacte de la transcription ;
-- mode démonstration local, sans donnée personnelle ni appel API ;
-- pipeline de démonstration de bout en bout avec WAV public local, transcription
-  simulée persistée, contexte des supports, barrière de confidentialité, six
-  checkpoints et génération automatique des deux DOCX ;
 - surveillance secteur, réseau, température et pression mémoire, avec préemption
   immédiate par un nouvel enregistrement ;
 - métriques de benchmark de transcription et corpus S1 préparés pour les UE 2.1,
@@ -120,12 +106,12 @@ téléchargent localement avec contrôle SHA-256 :
   fonctionnement hors ligne ;
 - progression, annulation, provenance moteur/modèle, facteur temps réel,
   contexte machine et persistance de la transcription brute ;
-- premier renderer DOCX déterministe en Swift pur et deux documents témoins
-  fictifs, désormais en A4 avec sommaire, tableaux, figures et liens audio ;
+- premier renderer DOCX déterministe en Swift pur, couvert par des tests A4 avec
+  sommaire, tableaux, figures et liens audio ;
 - contrat JSON `1.0` validé localement et filtre patient bloquant avant le cloud ;
-- orchestrateur IA avec simulation gratuite, adaptateur OpenAI Responses,
-  sorties structurées strictes, idempotence, reprises bornées et validation
-  locale avant rendu ;
+- orchestrateur IA et adaptateur OpenAI Responses conservés, avec sorties
+  structurées strictes, idempotence, reprises bornées et validation locale avant
+  rendu ;
 - clé API conservée dans le Trousseau macOS, appels payants désactivés par défaut,
   plafond total bloquant et historique comparatif coût/jetons/durée ;
 - adaptateurs simulés conservés pour tester le benchmark sans modèle ni audio ;

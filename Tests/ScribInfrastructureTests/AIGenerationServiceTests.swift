@@ -8,15 +8,15 @@ import Testing
 @testable import ScribInfrastructure
 
 struct AIGenerationServiceTests {
-    @Test func privacyApprovalThenSimulationIsValidatedPersistedAndIdempotent() async throws {
+    @Test func privacyApprovalThenGenerationIsValidatedPersistedAndIdempotent() async throws {
         let secretStore = InMemoryAISecretStore()
         let runStore = InMemoryAIGenerationRunStore()
         let orchestrator = StructuredGenerationOrchestrator(
-            adapters: [.simulated: SimulatedCloudGenerationAdapter()],
+            adapters: [.openAI: StubGenerationAdapter()],
             secretStore: secretStore,
             runStore: runStore
         )
-        var request = makeRequest(profile: AIModelCatalog.profiles[0])
+        var request = makeRequest(profile: nonLiveTestProfile)
 
         do {
             _ = try await orchestrator.run(request)
@@ -40,7 +40,6 @@ struct AIGenerationServiceTests {
 
         #expect(first.id == second.id)
         #expect(first.documents.map(\.kind) == [.fullCourse, .revisionSheet])
-        #expect(first.usage.isSimulated)
         #expect(first.usage.estimatedCostUSD == 0)
         #expect(await runStore.runs().count == 1)
     }
@@ -164,11 +163,11 @@ struct AIGenerationServiceTests {
         let secretStore = InMemoryAISecretStore()
         let firstStore = try LocalAIGenerationRunStore(rootDirectory: temporary)
         let orchestrator = StructuredGenerationOrchestrator(
-            adapters: [.simulated: SimulatedCloudGenerationAdapter()],
+            adapters: [.openAI: StubGenerationAdapter()],
             secretStore: secretStore,
             runStore: firstStore
         )
-        var request = makeRequest(profile: AIModelCatalog.profiles[0])
+        var request = makeRequest(profile: nonLiveTestProfile)
         request.privacyReview = approvedReview(for: request)
         let completed = try await orchestrator.run(request)
 
@@ -190,9 +189,32 @@ struct AIGenerationServiceTests {
     }
     #endif
 
+    private var nonLiveTestProfile: AIModelProfile {
+        AIModelProfile(
+            id: "local-test-profile",
+            provider: .openAI,
+            modelID: "local-test-model",
+            displayName: "Adaptateur de test local",
+            inputPriceUSDPerMillionTokens: 0,
+            outputPriceUSDPerMillionTokens: 0,
+            isLive: false
+        )
+    }
+
     private func makeRequest(profile: AIModelProfile) -> AIGenerationRequest {
-        let transcript = DemonstrationWorkspaceFactory().transcript()
-        let teacher = Teacher(name: "Enseignant Démo", recordingAuthorizationConfirmedAt: Date())
+        let transcript = TranscriptDraft(
+            courseTitle: "Pharmacologie",
+            teachingUnit: "UE 2.11 — Pharmacologie et thérapeutiques",
+            passages: [
+                TranscriptPassage(
+                    speaker: "Enseignant",
+                    startTime: 0,
+                    text: "Contacter patient@example.test pour le suivi du traitement.",
+                    flags: [.medicalImportance]
+                )
+            ]
+        )
+        let teacher = Teacher(name: "Enseignant", recordingAuthorizationConfirmedAt: Date())
         let course = Course(
             id: transcript.courseID,
             semester: .semester1,
@@ -201,10 +223,19 @@ struct AIGenerationServiceTests {
             teacher: teacher,
             expectedDuration: .oneHour
         )
+        let extraction = SupportDocumentExtraction(
+            documentID: UUID(),
+            sourceFileName: "Support-enseignant.docx",
+            title: "Repères de pharmacologie",
+            textElements: [
+                .init(kind: .heading, text: "Sécurisation de l’administration", level: 1, order: 0),
+                .init(kind: .listItem, text: "Vérifier la prescription.", order: 1)
+            ]
+        )
         return AIGenerationRequest(
             course: course,
             transcript: transcript,
-            supportExtractions: [DemonstrationWorkspaceFactory().supportDocument().extraction!],
+            supportExtractions: [extraction],
             privacyReview: nil,
             modelProfile: profile,
             preferences: AIGenerationPreferences(selectedModelProfileID: profile.id)
@@ -218,6 +249,50 @@ struct AIGenerationServiceTests {
         return PrivacyReview(
             contentFingerprint: TranscriptWorkspaceService().stableFingerprint(content),
             decision: .approved
+        )
+    }
+}
+
+private struct StubGenerationAdapter: AICloudGenerating {
+    func generate(
+        _ request: AIProviderGenerationRequest,
+        credential: String?
+    ) async throws -> AIProviderGenerationResponse {
+        let envelope = CourseGenerationEnvelope(
+            courseID: request.courseID,
+            documents: [
+                GeneratedCourseDocument(
+                    kind: .fullCourse,
+                    title: "Cours structuré",
+                    subtitle: "Résultat de test",
+                    metadata: [.init(label: "Modèle", value: request.modelID)],
+                    sections: [
+                        .init(title: "Synthèse", blocks: [
+                            .init(type: .paragraph, text: "Contenu structuré validant le contrat Scrib 1.0.")
+                        ])
+                    ]
+                ),
+                GeneratedCourseDocument(
+                    kind: .revisionSheet,
+                    title: "Fiche de révision",
+                    subtitle: "Résultat de test",
+                    metadata: [],
+                    sections: [
+                        .init(title: "À retenir", blocks: [
+                            .init(type: .bullets, items: ["Le JSON est validé avant le rendu Word."])
+                        ])
+                    ]
+                )
+            ]
+        )
+        let data = try JSONEncoder().encode(envelope)
+        return AIProviderGenerationResponse(
+            payload: data,
+            usage: AIProviderUsage(
+                providerRequestID: "test-request",
+                inputTokens: max(request.input.utf8.count / 4, 1),
+                outputTokens: max(data.count / 4, 1)
+            )
         )
     }
 }

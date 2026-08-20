@@ -20,8 +20,7 @@ struct LocalTranscriptionModelTests {
           "teachingUnit": "UE 2.1",
           "passages": [],
           "version": 1,
-          "updatedAt": 0,
-          "isDemonstration": false
+          "updatedAt": 0
         }
         """
         let decoder = JSONDecoder()

@@ -237,8 +237,7 @@ Le premier adaptateur réel utilise `https://api.openai.com/v1/responses`, deman
 une sortie JSON Schema stricte et désactive la conservation de la réponse côté
 requête (`store: false`). Les profils OpenAI sont un catalogue de benchmark, pas
 un choix définitif. Leur tarification est datée et doit être revérifiée avant la
-campagne d’essais. Le simulateur local passe par le même orchestrateur et le même
-validateur, avec un coût nul.
+campagne d’essais.
 
 ## 10. Rendu DOCX
 
