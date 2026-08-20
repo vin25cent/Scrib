@@ -21,11 +21,27 @@ public enum AVFoundationAudioRecorderError: LocalizedError {
     }
 }
 
+protocol MicrophonePermissionProviding: Sendable {
+    func authorizationStatus() -> AVAuthorizationStatus
+    func requestAccess(completionHandler: @escaping @Sendable (Bool) -> Void)
+}
+
+private struct AVCaptureDeviceMicrophonePermissionProvider: MicrophonePermissionProviding {
+    func authorizationStatus() -> AVAuthorizationStatus {
+        AVCaptureDevice.authorizationStatus(for: .audio)
+    }
+
+    func requestAccess(completionHandler: @escaping @Sendable (Bool) -> Void) {
+        AVCaptureDevice.requestAccess(for: .audio, completionHandler: completionHandler)
+    }
+}
+
 @MainActor
 public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
     public static let segmentDuration: TimeInterval = 10 * 60
 
     private let fileManager: FileManager
+    private let permissionProvider: any MicrophonePermissionProviding
     private var recorder: AVAudioRecorder?
     private var courseID: CourseID?
     private var directory: URL?
@@ -37,26 +53,43 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
     private var rolloverTask: Task<Void, Never>?
     private var disconnectionObserver: NSObjectProtocol?
 
-    public init(fileManager: FileManager = .default) {
+    public convenience init(fileManager: FileManager = .default) {
+        self.init(
+            fileManager: fileManager,
+            permissionProvider: AVCaptureDeviceMicrophonePermissionProvider()
+        )
+    }
+
+    init(
+        fileManager: FileManager,
+        permissionProvider: any MicrophonePermissionProviding
+    ) {
         self.fileManager = fileManager
+        self.permissionProvider = permissionProvider
         super.init()
         observeDeviceDisconnections()
     }
 
     public func requestPermission() async -> Bool {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        switch permissionProvider.authorizationStatus() {
         case .authorized:
             return true
         case .notDetermined:
-            return await withCheckedContinuation { continuation in
-                AVCaptureDevice.requestAccess(for: .audio) { granted in
-                    continuation.resume(returning: granted)
-                }
-            }
+            return await Self.requestAccess(using: permissionProvider)
         case .denied, .restricted:
             return false
         @unknown default:
             return false
+        }
+    }
+
+    private nonisolated static func requestAccess(
+        using provider: any MicrophonePermissionProviding
+    ) async -> Bool {
+        await withCheckedContinuation { continuation in
+            provider.requestAccess { @Sendable granted in
+                continuation.resume(returning: granted)
+            }
         }
     }
 
