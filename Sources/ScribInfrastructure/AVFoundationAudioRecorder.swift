@@ -31,7 +31,11 @@ private func logAudioRecording(_ message: String) {
 }
 
 private final class AudioRecorderDelegate: NSObject, AVAudioRecorderDelegate {
-    weak var owner: AVFoundationAudioRecorder?
+    private let didFail: @Sendable (String, URL) -> Void
+
+    init(didFail: @escaping @Sendable (String, URL) -> Void) {
+        self.didFail = didFail
+    }
 
     func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) {
         let details = error.map(audioErrorDetails)
@@ -39,10 +43,7 @@ private final class AudioRecorderDelegate: NSObject, AVAudioRecorderDelegate {
         let fileURL = recorder.url
 
         logAudioRecording("Erreur d’encodage; url=\(fileURL.path); \(details)")
-        let owner = owner
-        Task { @MainActor [weak owner] in
-            owner?.handleRecorderFailure(details: details, fileURL: fileURL)
-        }
+        didFail(details, fileURL)
     }
 
     func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
@@ -51,10 +52,7 @@ private final class AudioRecorderDelegate: NSObject, AVAudioRecorderDelegate {
         let fileURL = recorder.url
         let details = "AVAudioRecorderDelegate a terminé l’enregistrement avec successfully=false."
         logAudioRecording("Enregistrement interrompu; url=\(fileURL.path); \(details)")
-        let owner = owner
-        Task { @MainActor [weak owner] in
-            owner?.handleRecorderFailure(details: details, fileURL: fileURL)
-        }
+        didFail(details, fileURL)
     }
 }
 
@@ -79,7 +77,11 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
 
     private let fileManager: FileManager
     private let permissionProvider: any MicrophonePermissionProviding
-    private let recorderDelegate: AudioRecorderDelegate
+    private lazy var recorderDelegate = AudioRecorderDelegate { [weak self] details, fileURL in
+        Task { @MainActor [weak self] in
+            self?.handleRecorderFailure(details: details, fileURL: fileURL)
+        }
+    }
     private var recorder: AVAudioRecorder?
     private var courseID: CourseID?
     private var directory: URL?
@@ -104,9 +106,7 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
     ) {
         self.fileManager = fileManager
         self.permissionProvider = permissionProvider
-        self.recorderDelegate = AudioRecorderDelegate()
         super.init()
-        recorderDelegate.owner = self
         observeDeviceDisconnections()
     }
 
