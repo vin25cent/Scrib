@@ -28,6 +28,8 @@ public struct CourseTrackingSummary: Equatable, Sendable {
     public var failedCount: Int
     public var completedCount: Int
 
+    public var attentionCount: Int { suspendedCount + failedCount }
+
     public init(totalCount: Int, activeCount: Int, suspendedCount: Int, failedCount: Int, completedCount: Int) {
         self.totalCount = totalCount
         self.activeCount = activeCount
