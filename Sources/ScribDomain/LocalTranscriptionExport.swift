@@ -15,13 +15,16 @@ public enum LocalTranscriptionExport {
 
         metadata.append("Date : \(dateFormatter.string(from: course.courseDate))")
         metadata.append("Modèle : \(result.modelID.rawValue)")
+        metadata.append("Version : transcription brute (tokens Whisper internes masqués)")
 
         if result.metrics.audioDurationSeconds > 0 {
             metadata.append("Durée : \(timestamp(result.metrics.audioDurationSeconds))")
         }
 
-        let passages = result.passages.map { passage in
-            "[\(timestamp(passage.startTime))] \(passage.text)"
+        let passages = result.passages.compactMap { passage -> String? in
+            let userFacingText = WhisperTranscriptTextNormalizer.normalize(passage.text)
+            guard !userFacingText.isEmpty else { return nil }
+            return "[\(timestamp(passage.startTime))] \(userFacingText)"
         }
 
         return metadata.joined(separator: "\n")

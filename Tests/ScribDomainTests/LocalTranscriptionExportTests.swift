@@ -18,6 +18,7 @@ struct LocalTranscriptionExportTests {
             UE : UE 2.1 — Biologie fondamentale
             Date : 2026-08-20
             Modèle : tiny
+            Version : transcription brute (tokens Whisper internes masqués)
             Durée : 00:01:05
 
             [00:00:00] Bonjour, l’éthique médicale.
@@ -41,18 +42,36 @@ struct LocalTranscriptionExportTests {
         #expect(exported.hasSuffix("[01:01:01] \(exactText)"))
     }
 
+    @Test func plainTextRemovesWhisperTokensAndPreservesExactFrenchText() {
+        let usefulText = "Le cœur, l’éthique et la réanimation — déjà étudiés."
+        let rawText = "<|startoftranscript|><|fr|><|transcribe|><|0.00|>\(usefulText)<|12.34|><|endoftext|>"
+        let transcription = makeTranscription(
+            passages: [
+                .init(sourceSegmentID: UUID(), startTime: 12.34, endTime: 18.9, text: rawText),
+                .init(sourceSegmentID: UUID(), startTime: 19, endTime: 20, text: "<|endoftext|>")
+            ],
+            audioDurationSeconds: 20
+        )
+
+        let exported = LocalTranscriptionExport.plainText(from: transcription)
+
+        #expect(exported.hasSuffix("[00:00:12] \(usefulText)"))
+        #expect(!exported.contains("<|"))
+    }
+
     @Test func jsonExportIsValidAndRetainsRawTranscriptionData() throws {
+        let rawText = "<|fr|><|0.00|>Bonjour, le cœur."
         let word = RecognizedTranscriptionWord(
-            text: "Bonjour",
+            text: "<|0.00|>",
             startTime: 0,
             endTime: 0.5,
             probability: 0.92
         )
         let passage = RecognizedTranscriptionPassage(
             sourceSegmentID: UUID(),
-            startTime: 0,
-            endTime: 1,
-            text: "Bonjour",
+            startTime: 2.25,
+            endTime: 7.75,
+            text: rawText,
             confidence: 0.81,
             words: [word]
         )
@@ -65,7 +84,10 @@ struct LocalTranscriptionExportTests {
 
         #expect(decoded.course.title == transcription.course.title)
         #expect(decoded.result.modelID == .tinyMultilingual)
-        #expect(decoded.result.passages[0].text == "Bonjour")
+        #expect(decoded.result.passages[0].text == rawText)
+        #expect(decoded.result.passages[0].startTime == 2.25)
+        #expect(decoded.result.passages[0].endTime == 7.75)
+        #expect(decoded.result.passages[0].words[0].text == "<|0.00|>")
         #expect(decoded.result.passages[0].words[0].probability == 0.92)
         #expect(decoded.result.metrics.audioDurationSeconds == 42)
     }

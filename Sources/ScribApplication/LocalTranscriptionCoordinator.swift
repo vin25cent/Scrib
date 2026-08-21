@@ -24,6 +24,8 @@ public enum LocalTranscriptionError: LocalizedError, Equatable, Sendable {
 public struct TranscriptBoundaryDeduplicator: Sendable {
     public init() {}
 
+    /// Removes only duplicates that can be aligned to word timestamps.
+    /// Passages without word timing stay unchanged because temporal fidelity wins.
     public func deduplicating(
         _ passages: [RecognizedTranscriptionPassage],
         maximumOverlapWords: Int = 12
@@ -41,8 +43,13 @@ public struct TranscriptBoundaryDeduplicator: Sendable {
                 continue
             }
 
-            let previousWords = words(in: previous.text)
-            let currentWords = words(in: passage.text)
+            guard !previous.words.isEmpty, !passage.words.isEmpty else {
+                result.append(passage)
+                continue
+            }
+
+            let previousWords = previous.words.map(\.text)
+            let currentWords = passage.words.map(\.text)
             let upperBound = min(maximumOverlapWords, previousWords.count, currentWords.count)
             var overlap = 0
             if upperBound > 0 {
@@ -60,18 +67,17 @@ public struct TranscriptBoundaryDeduplicator: Sendable {
                 result.append(passage)
                 continue
             }
-            let remaining = currentWords.dropFirst(overlap).joined(separator: " ")
+            let remainingWords = Array(passage.words.dropFirst(overlap))
+            let remaining = remainingWords.map(\.text).joined(separator: " ")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !remaining.isEmpty {
                 passage.text = remaining
+                passage.words = remainingWords
+                passage.startTime = remainingWords[0].startTime
                 result.append(passage)
             }
         }
         return result
-    }
-
-    private func words(in text: String) -> [String] {
-        text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
     }
 
     private func normalized(_ word: String) -> String {
@@ -120,6 +126,9 @@ public actor LocalTranscriptionCoordinator {
         course: Course,
         segments: [RecordingSegment],
         modelID: LocalTranscriptionModelID,
+        globalGlossary: [String] = TranscriptionGlossary.minimalMedical.globalTerms,
+        courseGlossary: [String] = [],
+        supportDocuments: [SupportDocumentExtraction] = [],
         progress: @escaping @Sendable (LocalTranscriptionProgress) -> Void
     ) async throws -> StoredLocalTranscription {
         guard LocalTranscriptionModelCatalog.descriptor(for: modelID)?.isEnabledInAlpha == true else {
@@ -134,14 +143,22 @@ public actor LocalTranscriptionCoordinator {
             throw LocalTranscriptionError.modelUnavailable(modelID)
         }
 
+        let supportCandidates = SupportGlossaryCandidateExtractor.candidates(from: supportDocuments)
+        let context = LocalTranscriptionContextBuilder.build(
+            course: course,
+            globalGlossary: globalGlossary,
+            courseGlossary: courseGlossary,
+            supportCandidateTerms: supportCandidates
+        )
         let request = LocalTranscriptionRequest(
             course: course,
             segments: orderedSegments,
             modelID: modelID,
-            languageCode: "fr"
+            languageCode: "fr",
+            context: context
         )
         do {
-            var result = try await engine.transcribe(request, progress: progress)
+            let result = try await engine.transcribe(request, progress: progress)
             try Task.checkCancellation()
             progress(.init(
                 stage: .assembling,
@@ -150,19 +167,53 @@ public actor LocalTranscriptionCoordinator {
                 totalSegmentCount: orderedSegments.count,
                 elapsedSeconds: result.metrics.processingDurationSeconds
             ))
-            result.passages = deduplicator.deduplicating(result.passages)
+            let contextualizedPassages = deduplicator.deduplicating(result.passages)
+            var transformations: [TranscriptTransformation] = []
+            let rawByID = Dictionary(uniqueKeysWithValues: result.passages.map { ($0.id, $0) })
 
             let draft = TranscriptDraft(
                 courseID: course.id,
                 courseTitle: course.title,
                 teachingUnit: course.teachingUnit.displayName,
-                passages: result.passages.map {
-                    TranscriptPassage(
+                passages: contextualizedPassages.compactMap {
+                    let userFacingText = WhisperTranscriptTextNormalizer.normalize($0.text)
+                    guard !userFacingText.isEmpty else { return nil }
+                    if let raw = rawByID[$0.id], raw.text != $0.text || raw.startTime != $0.startTime {
+                        transformations.append(.init(
+                            passageID: $0.id,
+                            kind: .boundaryDeduplication,
+                            originalText: raw.text,
+                            resultingText: $0.text,
+                            originalStartTime: raw.startTime,
+                            resultingStartTime: $0.startTime
+                        ))
+                    }
+                    if userFacingText != $0.text {
+                        transformations.append(.init(
+                            passageID: $0.id,
+                            kind: .whisperControlTokenRemoval,
+                            originalText: $0.text,
+                            resultingText: userFacingText,
+                            originalStartTime: $0.startTime,
+                            resultingStartTime: $0.startTime
+                        ))
+                    }
+                    let reviewReasons = TranscriptionReviewPolicy.reasons(for: $0)
+                    let flags: Set<TranscriptPassageFlag>
+                    if reviewReasons.contains(.lowConfidenceCriticalNumber) {
+                        flags = [.uncertainty, .criticalNumber]
+                    } else if reviewReasons.contains(.lowConfidence) {
+                        flags = [.uncertainty]
+                    } else {
+                        flags = []
+                    }
+                    return TranscriptPassage(
                         id: $0.id,
                         speaker: "Voix non attribuée",
                         startTime: $0.startTime,
                         endTime: $0.endTime,
-                        text: $0.text,
+                        text: userFacingText,
+                        flags: flags,
                         sourceRecordingSegmentID: $0.sourceSegmentID,
                         confidence: $0.confidence
                     )
@@ -175,7 +226,8 @@ public actor LocalTranscriptionCoordinator {
                 course: course,
                 recordingSegments: orderedSegments,
                 result: result,
-                draft: draft
+                draft: draft,
+                transformations: transformations
             )
             progress(.init(
                 stage: .saving,

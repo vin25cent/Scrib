@@ -248,13 +248,6 @@ import UniformTypeIdentifiers
         AIModelCatalog.profile(id: aiPreferences.selectedModelProfileID)
             ?? AIModelCatalog.profiles[0]
     }
-    func requestDocumentRegeneration() {
-        workspaceNotice =
-            "La correction est prête. La régénération sera ajoutée à la file sans retranscrire l’audio."
-    }
-    func jumpToAudio(at seconds: TimeInterval) {
-        workspaceNotice = "Position audio sélectionnée : \(formatTimestamp(seconds))."
-    }
     func approvePrivacyReview() {
         guard let transcriptFingerprint, !privacyFindings.isEmpty else { return }
         privacyReview = PrivacyReview(

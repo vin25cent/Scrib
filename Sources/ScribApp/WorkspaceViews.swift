@@ -31,7 +31,7 @@ struct TranscriptEditorView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(model.transcriptDraft?.courseTitle ?? "Éditeur de transcription")
                     .font(.system(size: 28, weight: .semibold))
-                Text(model.transcriptDraft?.teachingUnit ?? "Corrigez le texte localement avant de générer les documents.")
+                Text(model.transcriptDraft?.teachingUnit ?? "Corrigez le texte localement. La génération DOCX n’est pas encore disponible dans l’application.")
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -45,8 +45,6 @@ struct TranscriptEditorView: View {
                 }
                 Button("Enregistrer") { model.saveTranscript() }
                     .buttonStyle(.bordered)
-                Button("Régénérer les documents") { model.requestDocumentRegeneration() }
-                    .buttonStyle(.borderedProminent)
             }
         }
         .padding(.horizontal, 32)
@@ -100,7 +98,6 @@ struct TranscriptEditorView: View {
                             passage: passage,
                             text: model.transcriptTextBinding(for: passage.id),
                             toggleFlag: { model.toggleTranscriptFlag($0, passageID: passage.id) },
-                            playAudio: { model.jumpToAudio(at: $0) },
                             formatTimestamp: model.formatTimestamp
                         )
                     }
@@ -117,7 +114,6 @@ private struct TranscriptPassageEditor: View {
     let passage: TranscriptPassage
     @Binding var text: String
     let toggleFlag: (TranscriptPassageFlag) -> Void
-    let playAudio: (TimeInterval) -> Void
     let formatTimestamp: (TimeInterval) -> String
 
     var body: some View {
@@ -127,15 +123,10 @@ private struct TranscriptPassageEditor: View {
                     .foregroundStyle(ScribDesign.accent)
                     .frame(width: 38, height: 38)
                     .background(ScribDesign.accent.opacity(0.09), in: Circle())
-                Button {
-                    playAudio(passage.startTime)
-                } label: {
-                    Label(formatTimestamp(passage.startTime), systemImage: "play.fill")
-                }
-                .buttonStyle(.plain)
+                Label(formatTimestamp(passage.startTime), systemImage: "clock")
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(ScribDesign.accent)
-                .help("Retrouver ce passage dans l’audio local")
+                .foregroundStyle(.secondary)
+                .help("Repère horodaté : la lecture audio n’est pas disponible dans cette version.")
             }
 
             VStack(alignment: .leading, spacing: 10) {

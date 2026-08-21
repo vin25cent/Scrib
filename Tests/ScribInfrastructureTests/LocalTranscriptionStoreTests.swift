@@ -44,7 +44,21 @@ struct LocalTranscriptionStoreTests {
             passages: [.init(id: passage.id, speaker: "Voix", startTime: 0, endTime: 2, text: passage.text)]
         )
         let store = try LocalTranscriptionStore(rootDirectory: root)
-        try await store.save(.init(course: course, recordingSegments: [segment], result: result, draft: draft))
+        let transformation = TranscriptTransformation(
+            passageID: passage.id,
+            kind: .whisperControlTokenRemoval,
+            originalText: "<|fr|>Texte brut",
+            resultingText: "Texte brut",
+            originalStartTime: 0,
+            resultingStartTime: 0
+        )
+        try await store.save(.init(
+            course: course,
+            recordingSegments: [segment],
+            result: result,
+            draft: draft,
+            transformations: [transformation]
+        ))
         draft.passages[0].text = "Texte corrigé"
         try await store.updateDraft(draft)
 
@@ -53,5 +67,6 @@ struct LocalTranscriptionStoreTests {
         #expect(restored?.result.plainText == "Texte brut")
         #expect(restored?.draft.passages[0].text == "Texte corrigé")
         #expect(restored?.recordingSegments[0].sequence == 1)
+        #expect(restored?.transformations == [transformation])
     }
 }

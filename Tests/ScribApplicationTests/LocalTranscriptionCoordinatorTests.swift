@@ -7,14 +7,22 @@ private actor FakeLocalEngine: TranscriptionEngine {
     nonisolated let descriptor = TranscriptionEngineDescriptor(id: "fake", displayName: "Fake", version: "1")
     var shouldWait = false
     var didUnload = false
+    private let suppliedPassages: [RecognizedTranscriptionPassage]?
+    private var lastRequest: LocalTranscriptionRequest?
+
+    init(passages: [RecognizedTranscriptionPassage]? = nil) {
+        suppliedPassages = passages
+    }
 
     func setShouldWait(_ value: Bool) { shouldWait = value }
     func unloaded() -> Bool { didUnload }
+    func receivedRequest() -> LocalTranscriptionRequest? { lastRequest }
 
     func transcribe(
         _ request: LocalTranscriptionRequest,
         progress: @escaping @Sendable (LocalTranscriptionProgress) -> Void
     ) async throws -> LocalTranscriptionResult {
+        lastRequest = request
         if shouldWait {
             try await Task.sleep(for: .seconds(10))
         }
@@ -27,9 +35,31 @@ private actor FakeLocalEngine: TranscriptionEngine {
             engine: descriptor,
             modelID: request.modelID,
             languageCode: request.languageCode,
-            passages: [
-                .init(sourceSegmentID: second.id, startTime: 10, endTime: 12, text: "est vivante. Elle respire."),
-                .init(sourceSegmentID: first.id, startTime: 0, endTime: 10, text: "La cellule est vivante.")
+            passages: suppliedPassages ?? [
+                .init(
+                    sourceSegmentID: second.id,
+                    startTime: 10,
+                    endTime: 12,
+                    text: "est vivante. Elle respire.",
+                    words: [
+                        .init(text: "est", startTime: 10, endTime: 10.2),
+                        .init(text: "vivante.", startTime: 10.2, endTime: 10.5),
+                        .init(text: "Elle", startTime: 10.5, endTime: 10.8),
+                        .init(text: "respire.", startTime: 10.8, endTime: 12)
+                    ]
+                ),
+                .init(
+                    sourceSegmentID: first.id,
+                    startTime: 0,
+                    endTime: 10,
+                    text: "La cellule est vivante.",
+                    words: [
+                        .init(text: "La", startTime: 0, endTime: 0.2),
+                        .init(text: "cellule", startTime: 0.2, endTime: 0.5),
+                        .init(text: "est", startTime: 9.5, endTime: 9.7),
+                        .init(text: "vivante.", startTime: 9.7, endTime: 10)
+                    ]
+                )
             ],
             metrics: .init(audioDurationSeconds: 20, processingDurationSeconds: 2)
         )
@@ -76,10 +106,123 @@ struct LocalTranscriptionCoordinatorTests {
         )
 
         #expect(stored.recordingSegments.map(\.sequence) == [1, 2])
-        #expect(stored.result.passages.map(\.text) == ["La cellule est vivante.", "Elle respire."])
-        #expect(stored.draft.passages.map(\.startTime) == [0, 10])
+        #expect(stored.result.passages.map(\.text) == ["La cellule est vivante.", "est vivante. Elle respire."])
+        #expect(stored.draft.passages.map(\.text) == ["La cellule est vivante.", "Elle respire."])
+        #expect(stored.draft.passages.map(\.startTime) == [0, 10.5])
+        #expect(stored.transformations?.contains { $0.kind == .boundaryDeduplication } == true)
         #expect(stored.draft.transcriptionEngine?.id == "fake")
         #expect(try await coordinator.latestTranscription()?.draft == stored.draft)
+    }
+
+    @Test func preservesUnalignedBoundaryTextWhenWordTimestampsAreMissing() async throws {
+        let course = makeCourse()
+        let segments = makeSegments(courseID: course.id)
+        let passages = [
+            RecognizedTranscriptionPassage(
+                sourceSegmentID: segments[0].id, startTime: 0, endTime: 10,
+                text: "La cellule est vivante."
+            ),
+            RecognizedTranscriptionPassage(
+                sourceSegmentID: segments[1].id, startTime: 10, endTime: 12,
+                text: "est vivante. Elle respire."
+            )
+        ]
+        let coordinator = LocalTranscriptionCoordinator(
+            engine: FakeLocalEngine(passages: passages),
+            modelManager: FixedModelManager(availability: .available),
+            store: InMemoryLocalTranscriptionStore()
+        )
+
+        let stored = try await coordinator.transcribe(
+            course: course, segments: segments, modelID: .smallMultilingual, progress: { _ in }
+        )
+
+        #expect(stored.result.passages == passages)
+        #expect(stored.draft.passages.map(\.text) == passages.map(\.text))
+        #expect(stored.transformations?.contains { $0.kind == .boundaryDeduplication } == false)
+    }
+
+    @Test func sendsBoundedCourseContextAndSeparatedGlossariesToEngine() async throws {
+        let course = makeCourse()
+        let segments = makeSegments(courseID: course.id)
+        let engine = FakeLocalEngine(passages: [])
+        let coordinator = LocalTranscriptionCoordinator(
+            engine: engine,
+            modelManager: FixedModelManager(availability: .available),
+            store: InMemoryLocalTranscriptionStore()
+        )
+
+        _ = try await coordinator.transcribe(
+            course: course,
+            segments: segments,
+            modelID: .smallMultilingual,
+            globalGlossary: ["IFSI", "mg"],
+            courseGlossary: ["naloxone", "MEOPA"],
+            progress: { _ in }
+        )
+
+        let context = await engine.receivedRequest()?.context
+        #expect(context?.prompt.contains("Cellule") == true)
+        #expect(context?.prompt.contains("naloxone") == true)
+        #expect(context?.glossary.globalTerms == ["IFSI", "mg"])
+        #expect(context?.glossary.courseTerms == ["naloxone", "MEOPA"])
+        #expect((context?.prompt.count ?? 0) <= LocalTranscriptionContextBuilder.maximumPromptCharacters)
+    }
+
+    @Test func marksLowConfidenceDoseWithoutChangingIt() async throws {
+        let course = makeCourse()
+        let segment = makeSegments(courseID: course.id)[0]
+        let passage = RecognizedTranscriptionPassage(
+            sourceSegmentID: segment.id,
+            startTime: 42,
+            endTime: 45,
+            text: "paracétamol 500 mg toutes les 6 heures",
+            confidence: 0.40
+        )
+        let coordinator = LocalTranscriptionCoordinator(
+            engine: FakeLocalEngine(passages: [passage]),
+            modelManager: FixedModelManager(availability: .available),
+            store: InMemoryLocalTranscriptionStore()
+        )
+
+        let stored = try await coordinator.transcribe(
+            course: course, segments: [segment], modelID: .smallMultilingual, progress: { _ in }
+        )
+
+        #expect(stored.draft.passages[0].text == passage.text)
+        #expect(stored.draft.passages[0].startTime == 42)
+        #expect(stored.draft.passages[0].flags == [.uncertainty, .criticalNumber])
+    }
+
+    @Test func presentsNormalizedWhisperTextWithoutChangingRawTextOrTimestamps() async throws {
+        let course = makeCourse()
+        let segment = makeSegments(courseID: course.id)[0]
+        let rawText = "<|startoftranscript|><|fr|><|transcribe|><|0.00|>Le cœur reste irrigué.<|endoftext|>"
+        let rawPassage = RecognizedTranscriptionPassage(
+            sourceSegmentID: segment.id,
+            startTime: 1.25,
+            endTime: 4.75,
+            text: rawText
+        )
+        let coordinator = LocalTranscriptionCoordinator(
+            engine: FakeLocalEngine(passages: [rawPassage]),
+            modelManager: FixedModelManager(availability: .available),
+            store: InMemoryLocalTranscriptionStore()
+        )
+
+        let stored = try await coordinator.transcribe(
+            course: course,
+            segments: [segment],
+            modelID: .tinyMultilingual,
+            progress: { _ in }
+        )
+
+        #expect(stored.result.passages[0].text == rawText)
+        #expect(stored.result.passages[0].startTime == 1.25)
+        #expect(stored.result.passages[0].endTime == 4.75)
+        #expect(stored.draft.passages[0].text == "Le cœur reste irrigué.")
+        #expect(stored.draft.passages[0].startTime == 1.25)
+        #expect(stored.draft.passages[0].endTime == 4.75)
     }
 
     @Test func missingModelFailsBeforeCallingEngine() async {
@@ -102,6 +245,27 @@ struct LocalTranscriptionCoordinatorTests {
         } catch {
             Issue.record("Erreur inattendue : \(error)")
         }
+    }
+
+    @Test func changingFromSmallToMediumUsesTheRequestedModel() async throws {
+        let course = makeCourse()
+        let segments = makeSegments(courseID: course.id)
+        let engine = FakeLocalEngine(passages: [])
+        let coordinator = LocalTranscriptionCoordinator(
+            engine: engine,
+            modelManager: FixedModelManager(availability: .available),
+            store: InMemoryLocalTranscriptionStore()
+        )
+
+        let stored = try await coordinator.transcribe(
+            course: course,
+            segments: segments,
+            modelID: .mediumMultilingual,
+            progress: { _ in }
+        )
+
+        #expect(stored.result.modelID == .mediumMultilingual)
+        #expect(await engine.receivedRequest()?.modelID == .mediumMultilingual)
     }
 
     @Test func cancellationPropagatesAndUnloadsEngine() async throws {

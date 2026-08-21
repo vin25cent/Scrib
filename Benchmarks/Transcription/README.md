@@ -21,3 +21,10 @@ Les références humaines représenteront 20 à 30 minutes au total, avec au moi
 un extrait contrôlé pour chacune des UE 2.1, 2.2, 2.4 et 2.11. Les passages
 inaudibles sont exclus du calcul et documentés séparément ; ils ne sont pas
 devinés.
+
+Le rapport JSON de schéma 2 conserve la variante exacte, les paramètres, la
+durée audio, le temps de traitement, le RTF, le nombre de passages, le pic mémoire
+approximatif et le rappel des termes critiques. WER/CER restent absents tant que
+`referenceTranscript` n'est pas une transcription humaine. Pour comparer le
+contexte, exécuter `ConfiguredLocalTranscriptionBenchmarkAdapter` avec
+`useInitialContext` à `false`, puis `true`, sur le même fichier et le même modèle.

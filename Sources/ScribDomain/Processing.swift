@@ -18,8 +18,7 @@ public enum ThermalCondition: String, Codable, Sendable {
     case unknown
 }
 
-/// A concrete activity currently performed by Scrib. This is deliberately not a
-/// description of the future end-to-end course pipeline.
+/// A concrete activity currently performed by Scrib.
 public enum ProcessingActivity: String, Codable, Sendable {
     case recording
     case localTranscription

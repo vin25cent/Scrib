@@ -65,6 +65,19 @@ public actor WhisperKitTranscriptionEngine: TranscriptionEngine {
             download: false
         ))
         loadedKit = kit
+        let promptTokens: [Int]? = {
+            guard let prompt = request.context?.prompt, !prompt.isEmpty, let tokenizer = kit.tokenizer else {
+                return nil
+            }
+            let encoded = tokenizer.encode(text: " " + prompt)
+                .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+            return encoded.isEmpty ? nil : encoded
+        }()
+        let decodingSettings = LocalTranscriptionDecodingSettings(
+            languageCode: request.languageCode,
+            initialPromptUsed: promptTokens != nil,
+            promptTokenCount: promptTokens?.count ?? 0
+        )
         let memorySampler = Task<Int64?, Never> {
             var peak: Int64?
             while !Task.isCancelled {
@@ -94,7 +107,18 @@ public actor WhisperKitTranscriptionEngine: TranscriptionEngine {
                 let windows = max(Int(ceil(recordingSegment.duration / 30)), 1)
                 let options = DecodingOptions(
                     language: request.languageCode,
+                    temperature: Float(decodingSettings.temperature),
+                    temperatureIncrementOnFallback: Float(decodingSettings.temperatureIncrementOnFallback),
+                    temperatureFallbackCount: decodingSettings.temperatureFallbackCount,
+                    sampleLength: decodingSettings.sampleLength,
+                    topK: decodingSettings.topK,
+                    usePrefillPrompt: true,
+                    skipSpecialTokens: decodingSettings.skipSpecialTokens,
                     wordTimestamps: true,
+                    promptTokens: promptTokens,
+                    compressionRatioThreshold: decodingSettings.compressionRatioThreshold.map(Float.init),
+                    logProbThreshold: decodingSettings.logProbabilityThreshold.map(Float.init),
+                    noSpeechThreshold: decodingSettings.noSpeechThreshold.map(Float.init),
                     concurrentWorkerCount: 1,
                     chunkingStrategy: .vad
                 )
@@ -157,7 +181,9 @@ public actor WhisperKitTranscriptionEngine: TranscriptionEngine {
                 modelSizeBytes: modelStatus.installedSizeBytes,
                 thermalStateBefore: initialThermal,
                 highestThermalState: highestThermal,
-                machine: Self.machineInformation()
+                machine: Self.machineInformation(),
+                inputSegmentCount: request.segments.count,
+                outputPassageCount: passages.count
             )
             return LocalTranscriptionResult(
                 courseID: request.course.id,
@@ -165,7 +191,10 @@ public actor WhisperKitTranscriptionEngine: TranscriptionEngine {
                 modelID: request.modelID,
                 languageCode: request.languageCode,
                 passages: passages,
-                metrics: metrics
+                metrics: metrics,
+                decodingSettings: decodingSettings,
+                context: request.context,
+                modelVariant: LocalTranscriptionModelCatalog.descriptor(for: request.modelID)?.whisperKitVariant
             )
         } catch {
             memorySampler.cancel()

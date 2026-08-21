@@ -38,26 +38,26 @@ public enum LocalTranscriptionModelCatalog {
     public static let models: [TranscriptionModelDescriptor] = [
         .init(
             id: .tinyMultilingual,
-            displayName: "Tiny multilingue",
+            displayName: "Tiny — développeur",
             whisperKitVariant: "openai_whisper-tiny",
             estimatedDownloadBytes: 76_600_000,
-            intendedUse: "Tests techniques rapides et diagnostic",
+            intendedUse: "Compatibilité et diagnostic uniquement ; déconseillé pour les cours réels",
             isEnabledInAlpha: true
         ),
         .init(
             id: .smallMultilingual,
-            displayName: "Small multilingue",
+            displayName: "Small — recommandé",
             whisperKitVariant: "openai_whisper-small",
             estimatedDownloadBytes: 486_000_000,
-            intendedUse: "Premiers essais de qualité en français",
+            intendedUse: "Baseline locale pour les cours réels en français",
             isEnabledInAlpha: true
         ),
         .init(
             id: .mediumMultilingual,
-            displayName: "Medium multilingue",
+            displayName: "Medium — à évaluer",
             whisperKitVariant: "openai_whisper-medium",
-            intendedUse: "Benchmark ultérieur",
-            isEnabledInAlpha: false
+            intendedUse: "Qualité potentiellement supérieure, plus lent ; à confirmer par benchmark sur ce Mac",
+            isEnabledInAlpha: true
         ),
         .init(
             id: .largeV3Turbo,
@@ -70,6 +70,11 @@ public enum LocalTranscriptionModelCatalog {
 
     public static var alphaModels: [TranscriptionModelDescriptor] {
         models.filter(\.isEnabledInAlpha)
+    }
+
+    /// The deliberately small model list shown to ordinary users.
+    public static var userFacingModels: [TranscriptionModelDescriptor] {
+        models.filter { $0.id == .smallMultilingual || $0.id == .mediumMultilingual }
     }
 
     public static func descriptor(for id: LocalTranscriptionModelID) -> TranscriptionModelDescriptor? {
@@ -152,17 +157,75 @@ public struct LocalTranscriptionRequest: Equatable, Sendable {
     public var segments: [RecordingSegment]
     public var modelID: LocalTranscriptionModelID
     public var languageCode: String
+    public var context: LocalTranscriptionContext?
 
     public init(
         course: Course,
         segments: [RecordingSegment],
         modelID: LocalTranscriptionModelID,
-        languageCode: String = "fr"
+        languageCode: String = "fr",
+        context: LocalTranscriptionContext? = nil
     ) {
         self.course = course
         self.segments = segments.sorted { $0.sequence < $1.sequence }
         self.modelID = modelID
         self.languageCode = languageCode
+        self.context = context
+    }
+}
+
+public struct LocalTranscriptionDecodingSettings: Equatable, Codable, Sendable {
+    public var languageCode: String
+    public var task: String
+    public var temperature: Double
+    public var temperatureIncrementOnFallback: Double
+    public var temperatureFallbackCount: Int
+    public var sampleLength: Int
+    public var topK: Int
+    public var wordTimestamps: Bool
+    public var skipSpecialTokens: Bool
+    public var chunkingStrategy: String
+    public var concurrentWorkerCount: Int
+    public var compressionRatioThreshold: Double?
+    public var logProbabilityThreshold: Double?
+    public var noSpeechThreshold: Double?
+    public var initialPromptUsed: Bool
+    public var promptTokenCount: Int
+
+    public init(
+        languageCode: String,
+        task: String = "transcribe",
+        temperature: Double = 0,
+        temperatureIncrementOnFallback: Double = 0.2,
+        temperatureFallbackCount: Int = 5,
+        sampleLength: Int = 224,
+        topK: Int = 5,
+        wordTimestamps: Bool = true,
+        skipSpecialTokens: Bool = true,
+        chunkingStrategy: String = "vad",
+        concurrentWorkerCount: Int = 1,
+        compressionRatioThreshold: Double? = 2.4,
+        logProbabilityThreshold: Double? = -1,
+        noSpeechThreshold: Double? = 0.6,
+        initialPromptUsed: Bool,
+        promptTokenCount: Int = 0
+    ) {
+        self.languageCode = languageCode
+        self.task = task
+        self.temperature = temperature
+        self.temperatureIncrementOnFallback = temperatureIncrementOnFallback
+        self.temperatureFallbackCount = temperatureFallbackCount
+        self.sampleLength = sampleLength
+        self.topK = topK
+        self.wordTimestamps = wordTimestamps
+        self.skipSpecialTokens = skipSpecialTokens
+        self.chunkingStrategy = chunkingStrategy
+        self.concurrentWorkerCount = concurrentWorkerCount
+        self.compressionRatioThreshold = compressionRatioThreshold
+        self.logProbabilityThreshold = logProbabilityThreshold
+        self.noSpeechThreshold = noSpeechThreshold
+        self.initialPromptUsed = initialPromptUsed
+        self.promptTokenCount = max(promptTokenCount, 0)
     }
 }
 
@@ -257,6 +320,8 @@ public struct LocalTranscriptionMetrics: Equatable, Codable, Sendable {
     public var thermalStateBefore: ThermalCondition
     public var highestThermalState: ThermalCondition
     public var machine: TranscriptionMachineInformation?
+    public var inputSegmentCount: Int?
+    public var outputPassageCount: Int?
 
     public init(
         audioDurationSeconds: Double,
@@ -265,7 +330,9 @@ public struct LocalTranscriptionMetrics: Equatable, Codable, Sendable {
         modelSizeBytes: Int64? = nil,
         thermalStateBefore: ThermalCondition = .unknown,
         highestThermalState: ThermalCondition = .unknown,
-        machine: TranscriptionMachineInformation? = nil
+        machine: TranscriptionMachineInformation? = nil,
+        inputSegmentCount: Int? = nil,
+        outputPassageCount: Int? = nil
     ) {
         self.audioDurationSeconds = max(audioDurationSeconds, 0)
         self.processingDurationSeconds = max(processingDurationSeconds, 0)
@@ -274,6 +341,8 @@ public struct LocalTranscriptionMetrics: Equatable, Codable, Sendable {
         self.thermalStateBefore = thermalStateBefore
         self.highestThermalState = highestThermalState
         self.machine = machine
+        self.inputSegmentCount = inputSegmentCount.map { max($0, 0) }
+        self.outputPassageCount = outputPassageCount.map { max($0, 0) }
     }
 
     public var realtimeFactor: Double? {
@@ -290,6 +359,9 @@ public struct LocalTranscriptionResult: Equatable, Codable, Sendable {
     public var passages: [RecognizedTranscriptionPassage]
     public var metrics: LocalTranscriptionMetrics
     public var completedAt: Date
+    public var decodingSettings: LocalTranscriptionDecodingSettings?
+    public var context: LocalTranscriptionContext?
+    public var modelVariant: String?
 
     public init(
         courseID: CourseID,
@@ -298,7 +370,10 @@ public struct LocalTranscriptionResult: Equatable, Codable, Sendable {
         languageCode: String,
         passages: [RecognizedTranscriptionPassage],
         metrics: LocalTranscriptionMetrics,
-        completedAt: Date = Date()
+        completedAt: Date = Date(),
+        decodingSettings: LocalTranscriptionDecodingSettings? = nil,
+        context: LocalTranscriptionContext? = nil,
+        modelVariant: String? = nil
     ) {
         self.courseID = courseID
         self.engine = engine
@@ -309,10 +384,19 @@ public struct LocalTranscriptionResult: Equatable, Codable, Sendable {
         }
         self.metrics = metrics
         self.completedAt = completedAt
+        self.decodingSettings = decodingSettings
+        self.context = context
+        self.modelVariant = modelVariant
     }
 
     public var plainText: String {
         passages.map(\.text).filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    public var userFacingPlainText: String {
+        passages.map { WhisperTranscriptTextNormalizer.normalize($0.text) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 }
 
@@ -321,16 +405,19 @@ public struct StoredLocalTranscription: Equatable, Codable, Sendable {
     public var recordingSegments: [RecordingSegment]
     public var result: LocalTranscriptionResult
     public var draft: TranscriptDraft
+    public var transformations: [TranscriptTransformation]?
 
     public init(
         course: Course,
         recordingSegments: [RecordingSegment],
         result: LocalTranscriptionResult,
-        draft: TranscriptDraft
+        draft: TranscriptDraft,
+        transformations: [TranscriptTransformation] = []
     ) {
         self.course = course
         self.recordingSegments = recordingSegments.sorted { $0.sequence < $1.sequence }
         self.result = result
         self.draft = draft
+        self.transformations = transformations
     }
 }

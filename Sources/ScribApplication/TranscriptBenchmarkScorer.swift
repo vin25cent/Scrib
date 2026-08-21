@@ -29,6 +29,13 @@ public struct TranscriptBenchmarkScorer: Sendable {
         )
     }
 
+    public func criticalTermRecall(terms: [String], hypothesis: String) -> Double {
+        criticalTermRecall(
+            terms: terms,
+            hypothesis: words(in: hypothesis, stripDiacritics: true)
+        )
+    }
+
     private func words(in text: String, stripDiacritics: Bool) -> [String] {
         var normalized = text.lowercased()
         if stripDiacritics {

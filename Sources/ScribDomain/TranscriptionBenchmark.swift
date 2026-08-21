@@ -70,23 +70,42 @@ public struct TranscriptionBenchmarkResult: Equatable, Codable, Sendable {
     public var engineVersion: String
     public var modelID: String
     public var corpusItemID: String
-    public var accuracy: TranscriptAccuracyMetrics
+    public var configuration: TranscriptionBenchmarkConfiguration?
+    public var accuracy: TranscriptAccuracyMetrics?
+    public var criticalTermRecall: Double?
     public var resources: TranscriptionResourceMetrics
+    public var passageCount: Int?
 
     public init(
         engineID: String,
         engineVersion: String,
         modelID: String,
         corpusItemID: String,
-        accuracy: TranscriptAccuracyMetrics,
-        resources: TranscriptionResourceMetrics
+        configuration: TranscriptionBenchmarkConfiguration? = nil,
+        accuracy: TranscriptAccuracyMetrics?,
+        criticalTermRecall: Double? = nil,
+        resources: TranscriptionResourceMetrics,
+        passageCount: Int? = nil
     ) {
         self.engineID = engineID
         self.engineVersion = engineVersion
         self.modelID = modelID
         self.corpusItemID = corpusItemID
+        self.configuration = configuration
         self.accuracy = accuracy
+        self.criticalTermRecall = criticalTermRecall
         self.resources = resources
+        self.passageCount = passageCount
+    }
+}
+
+public struct TranscriptionBenchmarkConfiguration: Equatable, Codable, Sendable {
+    public var modelVariant: String
+    public var parameters: [String: String]
+
+    public init(modelVariant: String, parameters: [String: String] = [:]) {
+        self.modelVariant = modelVariant
+        self.parameters = parameters
     }
 }
 
@@ -94,7 +113,7 @@ public struct TranscriptionBenchmarkCase: Equatable, Codable, Sendable {
     public var id: String
     public var audioID: String
     public var audioDurationSeconds: Double
-    public var referenceTranscript: String
+    public var referenceTranscript: String?
     public var criticalTerms: [String]
     public var referenceTimestamps: [TimestampedTerm]
 
@@ -102,7 +121,7 @@ public struct TranscriptionBenchmarkCase: Equatable, Codable, Sendable {
         id: String,
         audioID: String,
         audioDurationSeconds: Double,
-        referenceTranscript: String,
+        referenceTranscript: String? = nil,
         criticalTerms: [String] = [],
         referenceTimestamps: [TimestampedTerm] = []
     ) {
@@ -123,6 +142,7 @@ public struct BenchmarkAdapterOutput: Equatable, Codable, Sendable {
     public var modelSizeBytes: Int64?
     public var highestThermalState: ThermalCondition
     public var machine: TranscriptionMachineInformation?
+    public var passageCount: Int?
 
     public init(
         transcript: String,
@@ -131,7 +151,8 @@ public struct BenchmarkAdapterOutput: Equatable, Codable, Sendable {
         peakResidentMemoryBytes: Int64? = nil,
         modelSizeBytes: Int64? = nil,
         highestThermalState: ThermalCondition = .unknown,
-        machine: TranscriptionMachineInformation? = nil
+        machine: TranscriptionMachineInformation? = nil,
+        passageCount: Int? = nil
     ) {
         self.transcript = transcript
         self.timestamps = timestamps
@@ -140,6 +161,7 @@ public struct BenchmarkAdapterOutput: Equatable, Codable, Sendable {
         self.modelSizeBytes = modelSizeBytes
         self.highestThermalState = highestThermalState
         self.machine = machine
+        self.passageCount = passageCount.map { max($0, 0) }
     }
 }
 
@@ -163,7 +185,7 @@ public struct TranscriptionBenchmarkRun: Equatable, Codable, Sendable {
     public var failures: [TranscriptionBenchmarkFailure]
 
     public init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = 2,
         generatedAt: Date = Date(),
         machine: TranscriptionMachineInformation? = nil,
         results: [TranscriptionBenchmarkResult],

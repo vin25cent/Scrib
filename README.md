@@ -1,8 +1,8 @@
 # Scrib
 
-Scrib est une application macOS native destinée à enregistrer des cours IFSI, les
-transcrire localement, puis produire automatiquement deux documents Microsoft
-Word : un cours structuré fidèle et une fiche de révision.
+Scrib est une application macOS native destinée à enregistrer des cours IFSI et
+à les transcrire localement. La génération structurée et le rendu DOCX existent
+comme modules testés, mais ne sont pas encore reliés au parcours utilisateur.
 
 Le dépôt contient la spécification, l'architecture et l'alpha Swift de
 l'enregistrement, de la transcription locale, du suivi persistant d’activités, des
@@ -23,7 +23,7 @@ payants sont désactivés par défaut.
 - [Barrière locale de confidentialité](docs/PRIVACY_GATE.md)
 - [Génération IA](docs/AI_GENERATION.md)
 - [Installer l’alpha sur macOS](docs/INSTALLATION_ALPHA_MACOS.md)
-- [Notes de version 0.1.0-alpha.13](docs/RELEASE_NOTES_0.1.0_ALPHA.13.md)
+- [Notes de version 0.1.0-alpha.14](docs/RELEASE_NOTES_0.1.0_ALPHA.14.md)
 
 ## Structure
 
@@ -31,7 +31,7 @@ payants sont désactivés par défaut.
 Sources/
 ├── ScribDomain/          Modèles et états métier, sans dépendance d'interface
 ├── ScribApplication/     Cas d'usage et contrats des services
-├── ScribInfrastructure/  Futurs adaptateurs macOS, IA, DOCX et stockage
+├── ScribInfrastructure/  Adaptateurs macOS, IA, DOCX et stockage
 └── ScribApp/             Point d'entrée SwiftUI et interface légère
 Tests/
 ├── ScribDomainTests/
@@ -81,13 +81,13 @@ au premier lancement.
 - formulaire et référentiel des 61 UE intégrés ;
 - autorisation d'enregistrer mémorisée par enseignant ;
 - moteur AVFoundation AAC mono, vu-mètre, pause/reprise et segments récupérables
-  intégrés et validés sur le microphone du Mac cible ;
+  intégrés ; macOS demande l’autorisation du microphone au premier enregistrement ;
 - suivi persistant SwiftData des activités réellement exécutées : enregistrement
   et transcription locale ;
 - tableau de bord de suivi avec filtres, compteurs, détail d’activité et
   progression lorsqu’elle est fournie par le workflow réel ;
 - éditeur local de transcription avec recherche, corrections, marqueurs et
-  renvois vers les horodatages audio ;
+  horodatages ; la lecture audio depuis ces repères n’est pas encore disponible ;
 - import persistant des supports enseignant Word, PDF, présentation, tableur et
   image, avec rejet des documents déjà générés par Scrib ;
 - extraction locale des DOCX (titres, paragraphes, listes, tableaux et repères
@@ -99,15 +99,18 @@ au premier lancement.
   elles ne pilotent pas encore la transcription ni le suivi ;
 - métriques de benchmark de transcription et corpus S1 préparés pour les UE 2.1,
   2.2, 2.4 et 2.11, sans média versionné ;
-- transcription locale réelle expérimentale par WhisperKit 1.0.0, à partir des
-  vrais segments M4A de Scrib, en français et avec horodatages ;
-- téléchargement volontaire des modèles multilingues Tiny (tests techniques,
-  environ 76,6 Mo) et Small (premiers essais qualité, environ 486 Mo), puis
+- transcription locale réelle par WhisperKit 1.0.0, à partir des vrais segments
+  M4A de Scrib, en français, avec horodatages et contexte initial borné ;
+- Small multilingue est la baseline recommandée (environ 486 Mo) ; Medium est
+  disponible comme candidat qualité à benchmarker, et Tiny reste une compatibilité
+  développeur non affichée dans le parcours normal ;
   fonctionnement hors ligne ;
-- progression, annulation, provenance moteur/modèle, facteur temps réel,
-  contexte machine et persistance de la transcription brute ;
-- premier renderer DOCX déterministe en Swift pur, couvert par des tests A4 avec
-  sommaire, tableaux, figures et liens audio ;
+- progression, annulation, provenance moteur/modèle, paramètres de décodage,
+  facteur temps réel, mémoire maximale approximative, passages faibles à vérifier
+  et persistance non destructive de la transcription brute ;
+- renderer DOCX déterministe en Swift pur, couvert par des tests A4 avec
+  sommaire, tableaux, figures et liens audio ; il n’est pas encore exposé dans
+  l’interface ;
 - contrat JSON `1.0` validé localement et filtre patient bloquant avant le cloud ;
 - orchestrateur IA et adaptateur OpenAI Responses conservés, avec sorties
   structurées strictes, idempotence, reprises bornées et validation locale avant

@@ -3,11 +3,13 @@ import Testing
 @testable import ScribDomain
 
 struct LocalTranscriptionModelTests {
-    @Test func alphaCatalogEnablesOnlyTinyAndSmall() {
-        #expect(LocalTranscriptionModelCatalog.alphaModels.map(\.id) == [.tinyMultilingual, .smallMultilingual])
+    @Test func smallIsBaselineMediumIsQualityOptionAndTinyStaysDeveloperOnly() {
+        #expect(LocalTranscriptionModelCatalog.alphaModels.map(\.id) == [.tinyMultilingual, .smallMultilingual, .mediumMultilingual])
+        #expect(LocalTranscriptionModelCatalog.userFacingModels.map(\.id) == [.smallMultilingual, .mediumMultilingual])
         #expect(LocalTranscriptionModelCatalog.descriptor(for: .tinyMultilingual)?.whisperKitVariant == "openai_whisper-tiny")
         #expect(LocalTranscriptionModelCatalog.descriptor(for: .smallMultilingual)?.estimatedDownloadBytes == 486_000_000)
-        #expect(LocalTranscriptionModelCatalog.descriptor(for: .mediumMultilingual)?.isEnabledInAlpha == false)
+        #expect(LocalTranscriptionModelCatalog.descriptor(for: .smallMultilingual)?.displayName.contains("recommandé") == true)
+        #expect(LocalTranscriptionModelCatalog.descriptor(for: .mediumMultilingual)?.isEnabledInAlpha == true)
         #expect(LocalTranscriptionModelCatalog.descriptor(for: .largeV3Turbo) != nil)
     }
 

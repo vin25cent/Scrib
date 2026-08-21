@@ -52,6 +52,7 @@ validée sur le Mac cible.
   octets.
 
 La validation automatisée vérifie la signature ZIP, les parties OOXML
-obligatoires, le déterminisme, l'échappement XML et les horodatages. La validation
-visuelle rend ensuite chaque page en PNG et inspecte les débordements, tableaux,
-polices, en-têtes, pieds de page et ruptures.
+obligatoires, le déterminisme, l'échappement XML et les horodatages. Il n’existe
+plus de prévisualiseur DOCX dans le dépôt : la recette visuelle dans Word sur
+macOS reste une vérification manuelle à réaliser avant d’exposer l’export dans
+l’application.

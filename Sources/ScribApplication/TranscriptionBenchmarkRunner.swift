@@ -5,7 +5,12 @@ public protocol TranscriptionBenchmarkAdapter: Sendable {
     var engineID: String { get }
     var engineVersion: String { get }
     var modelID: String { get }
+    var configuration: TranscriptionBenchmarkConfiguration? { get }
     func transcribe(_ benchmarkCase: TranscriptionBenchmarkCase) async throws -> BenchmarkAdapterOutput
+}
+
+public extension TranscriptionBenchmarkAdapter {
+    var configuration: TranscriptionBenchmarkConfiguration? { nil }
 }
 
 public struct TranscriptionBenchmarkRunner: Sendable {
@@ -32,12 +37,22 @@ public struct TranscriptionBenchmarkRunner: Sendable {
                         engineVersion: adapter.engineVersion,
                         modelID: adapter.modelID,
                         corpusItemID: item.id,
-                        accuracy: scorer.score(
-                            reference: item.referenceTranscript,
-                            hypothesis: output.transcript,
-                            criticalTerms: item.criticalTerms,
-                            referenceTimestamps: item.referenceTimestamps,
-                            hypothesisTimestamps: output.timestamps
+                        configuration: adapter.configuration,
+                        accuracy: item.referenceTranscript.flatMap {
+                            guard !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                                return nil
+                            }
+                            return scorer.score(
+                                reference: $0,
+                                hypothesis: output.transcript,
+                                criticalTerms: item.criticalTerms,
+                                referenceTimestamps: item.referenceTimestamps,
+                                hypothesisTimestamps: output.timestamps
+                            )
+                        },
+                        criticalTermRecall: item.criticalTerms.isEmpty ? nil : scorer.criticalTermRecall(
+                            terms: item.criticalTerms,
+                            hypothesis: output.transcript
                         ),
                         resources: .init(
                             audioDurationSeconds: item.audioDurationSeconds,
@@ -46,7 +61,8 @@ public struct TranscriptionBenchmarkRunner: Sendable {
                             modelSizeBytes: output.modelSizeBytes,
                             thermalStateBefore: thermalStateBefore,
                             highestThermalState: output.highestThermalState
-                        )
+                        ),
+                        passageCount: output.passageCount
                     ))
                 } catch {
                     failures.append(.init(engineID: adapter.engineID, corpusItemID: item.id, message: String(describing: error)))
@@ -73,12 +89,14 @@ public struct SimulatedTranscriptionAdapter: TranscriptionBenchmarkAdapter {
     public var engineVersion: String
     public var modelID: String
     public var outputsByAudioID: [String: BenchmarkAdapterOutput]
+    public var configuration: TranscriptionBenchmarkConfiguration?
 
-    public init(engineID: String, engineVersion: String, modelID: String, outputsByAudioID: [String: BenchmarkAdapterOutput]) {
+    public init(engineID: String, engineVersion: String, modelID: String, outputsByAudioID: [String: BenchmarkAdapterOutput], configuration: TranscriptionBenchmarkConfiguration? = nil) {
         self.engineID = engineID
         self.engineVersion = engineVersion
         self.modelID = modelID
         self.outputsByAudioID = outputsByAudioID
+        self.configuration = configuration
     }
 
     public func transcribe(_ benchmarkCase: TranscriptionBenchmarkCase) throws -> BenchmarkAdapterOutput {

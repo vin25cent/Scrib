@@ -11,8 +11,8 @@ struct LocalTranscriptionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 ScribPageHeader(
-                    title: "Transcription locale expérimentale",
-                    subtitle: "WhisperKit est intégré pour le benchmark alpha. Il ne constitue pas encore le choix définitif de Scrib.",
+                    title: "Transcription locale",
+                    subtitle: "Small est la baseline recommandée. Medium reste un candidat qualité à confirmer par benchmark sur votre Mac.",
                     icon: "waveform.badge.magnifyingglass"
                 )
                 LocalTranscriptionEngineCard()
@@ -50,7 +50,7 @@ private struct LocalTranscriptionEngineCard: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text("ALPHA / BENCHMARK")
+            Text("LOCAL-FIRST")
                 .font(.caption2.bold())
                 .foregroundStyle(.orange)
                 .padding(.horizontal, 10)
@@ -281,18 +281,39 @@ private struct LocalTranscriptionResultCard: View {
                 subtitle: "Persisté localement avant toute génération de cours.",
                 icon: "checkmark.seal.fill"
             )
-            HStack(spacing: 24) {
-                LocalTranscriptionMetric(title: "Modèle", value: result.modelID.rawValue)
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 130), alignment: .leading)],
+                alignment: .leading,
+                spacing: 14
+            ) {
+                LocalTranscriptionMetric(title: "Modèle", value: result.modelVariant ?? result.modelID.rawValue)
                 LocalTranscriptionMetric(
                     title: "Traitement",
                     value: model.formatTimestamp(result.metrics.processingDurationSeconds)
                 )
+                LocalTranscriptionMetric(
+                    title: "Audio",
+                    value: model.formatTimestamp(result.metrics.audioDurationSeconds)
+                )
                 LocalTranscriptionMetric(title: "Facteur temps réel", value: realtimeFactorText)
                 LocalTranscriptionMetric(title: "Passages", value: "\(result.passages.count)")
-                Spacer()
+                let reviewCount = result.passages.filter {
+                    !TranscriptionReviewPolicy.reasons(for: $0).isEmpty
+                }.count
+                if reviewCount > 0 {
+                    LocalTranscriptionMetric(title: "À vérifier", value: "\(reviewCount)")
+                }
+                if let memory = result.metrics.peakResidentMemoryBytes {
+                    LocalTranscriptionMetric(title: "Mémoire max approx.", value: model.formatBytes(memory))
+                }
             }
-            if !result.plainText.isEmpty {
-                Text(result.plainText)
+            if let settings = result.decodingSettings {
+                Text("Décodage : français, température \(settings.temperature, format: .number), timestamps mot, VAD, \(settings.initialPromptUsed ? "contexte actif" : "sans contexte")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if !result.userFacingPlainText.isEmpty {
+                Text(result.userFacingPlainText)
                     .font(.body)
                     .lineLimit(5)
                     .padding(12)

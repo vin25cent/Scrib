@@ -1,11 +1,6 @@
 import Foundation
 import ScribDomain
 
-public protocol CourseRepository: Sendable {
-    func save(_ course: Course) async throws
-    func course(id: CourseID) async throws -> Course?
-}
-
 @MainActor
 public protocol AudioRecording: AnyObject {
     func requestPermission() async -> Bool
@@ -117,10 +112,6 @@ public protocol LocalTranscriptionStoring: Sendable {
     func save(_ transcription: StoredLocalTranscription) async throws
     func updateDraft(_ draft: TranscriptDraft) async throws
     func latest() async throws -> StoredLocalTranscription?
-}
-
-public protocol DocumentRendering: Sendable {
-    func render(courseID: CourseID, transcript: String) async throws
 }
 
 public protocol StructuredDocumentRendering: Sendable {

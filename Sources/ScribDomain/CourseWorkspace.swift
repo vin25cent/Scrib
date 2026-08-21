@@ -3,11 +3,13 @@ import Foundation
 public enum TranscriptPassageFlag: String, Codable, CaseIterable, Hashable, Sendable {
     case uncertainty
     case medicalImportance
+    case criticalNumber
 
     public var displayName: String {
         switch self {
-        case .uncertainty: "Passage incertain"
+        case .uncertainty: "À vérifier"
         case .medicalImportance: "Information médicale importante"
+        case .criticalNumber: "Nombre, dose ou unité à vérifier"
         }
     }
 }

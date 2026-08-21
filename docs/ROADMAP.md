@@ -9,7 +9,7 @@
 
 Sortie : dépôt documenté, ouvrable dans Xcode et prêt pour des prototypes isolés.
 
-## Phase 1 — Prototype fiable d'enregistrement (validation MacBook en attente)
+## Phase 1 — Prototype fiable d'enregistrement
 
 - formulaire et liste d'UE ;
 - capture AVFoundation, vu-mètre et segments récupérables ;

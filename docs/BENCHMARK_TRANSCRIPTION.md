@@ -19,10 +19,10 @@ Intégration Swift native et modèles Core ML, distribuée sous licence MIT. C'e
 le candidat principal pour une application autonome et une utilisation possible
 de l'Apple Neural Engine.
 
-État alpha.2 : adaptateur réel intégré avec Argmax OSS / WhisperKit 1.0.0 épinglé
-au commit `25c62997041c134b03ca82731ce2f6fd2cae1eb9`. Tiny multilingue sert aux
-smoke tests ; Small multilingue au premier benchmark français. Ce jalon est une
-expérience et non la décision finale du moteur.
+WhisperKit 1.0.0 est épinglé exactement. Small multilingue est la baseline des
+cours réels. Tiny n'est plus présenté dans l'interface normale. Medium est un
+mode qualité facultatif dont le bénéfice doit être établi sur le même audio avant
+toute recommandation.
 
 Source : <https://github.com/argmaxinc/argmax-oss-swift>
 
@@ -80,7 +80,8 @@ Règles :
 
 ## Mesures
 
-Le cœur Swift calcule déjà :
+Le cœur Swift calcule, uniquement lorsqu'une véritable référence humaine est
+fournie :
 
 - WER strict, sensible aux accents ;
 - WER relâché, insensible aux accents ;
@@ -90,7 +91,9 @@ Le cœur Swift calcule déjà :
 - erreur moyenne des horodatages ;
 - facteur temps réel à partir de la durée audio et du temps de traitement.
 
-L’adaptateur alpha.2 ajoute l’identifiant et la version du moteur, le modèle, la
+Sans référence humaine, WER et CER sont absents du JSON ; le rappel d'une liste
+de termes critiques reste calculable. L’adaptateur ajoute l’identifiant et la
+version du moteur, la variante exacte du modèle, les paramètres de décodage, le
 durée de traitement murale, la taille installée, un échantillonnage du pic de
 mémoire résidente, les états thermiques initial/maximal et les informations de
 machine (modèle matériel, mémoire physique, macOS, architecture). Le rapport JSON
@@ -109,13 +112,15 @@ conformément à la documentation Apple :
 1. Brancher le Mac au secteur et fermer les tâches non nécessaires.
 2. Démarrer Word avec un document de cours de 30 pages.
 3. Laisser la température revenir à l'état nominal.
-4. Dans **Transcription locale expérimentale**, télécharger volontairement le
-   modèle puis transcrire le même fichier avec lot 1, français et paramètres figés.
-5. Relever métriques automatiques et réactivité Word.
-6. Répéter trois fois ; conserver la médiane et le pire pic mémoire.
-7. Pour alpha.2, tester d’abord 1 minute puis 10 à 30 minutes. Le test de quatre
+4. Télécharger volontairement Small, puis éventuellement Medium. Aucun benchmark
+   ne déclenche de téléchargement automatique.
+5. Exécuter le même fichier avec Small sans contexte, Small avec contexte, puis
+   Medium avec le même contexte et les mêmes paramètres.
+6. Relever métriques automatiques et réactivité Word.
+7. Répéter trois fois ; conserver la médiane et le pire pic mémoire.
+8. Tester d’abord 1 minute puis 10 à 30 minutes. Le test de quatre
    heures avec checkpoints reste un jalon ultérieur.
-8. Forcer une interruption, relancer Scrib et vérifier la reprise sans doublon.
+9. Forcer une interruption, relancer Scrib et vérifier la reprise sans doublon.
 
 ## Seuils de décision V1
 

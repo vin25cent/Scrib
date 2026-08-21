@@ -13,16 +13,46 @@ struct TranscriptionBenchmarkRunnerTests {
             criticalTerms: ["membrane plasmique"],
             referenceTimestamps: [.init(term: "membrane plasmique", seconds: 12)]
         )
-        let exact = SimulatedTranscriptionAdapter(engineID: "sim-exact", engineVersion: "1", modelID: "fixture", outputsByAudioID: [item.audioID: .init(transcript: item.referenceTranscript, timestamps: [.init(term: "membrane plasmique", seconds: 12.5)], processingDurationSeconds: 30, peakResidentMemoryBytes: 900_000_000)])
+        let exact = SimulatedTranscriptionAdapter(engineID: "sim-exact", engineVersion: "1", modelID: "fixture", outputsByAudioID: [item.audioID: .init(transcript: item.referenceTranscript ?? "", timestamps: [.init(term: "membrane plasmique", seconds: 12.5)], processingDurationSeconds: 30, peakResidentMemoryBytes: 900_000_000)])
         let degraded = SimulatedTranscriptionAdapter(engineID: "sim-degraded", engineVersion: "1", modelID: "fixture", outputsByAudioID: [item.audioID: .init(transcript: "La membrane protège cellule.", processingDurationSeconds: 150)])
 
         let run = await TranscriptionBenchmarkRunner().run(cases: [item], adapters: [exact, degraded])
         #expect(run.failures.isEmpty)
         #expect(run.results.count == 2)
-        #expect(run.results[0].accuracy.strictWordErrorRate == 0)
+        #expect(run.results[0].accuracy?.strictWordErrorRate == 0)
         #expect(run.results[0].resources.realtimeFactor == 0.25)
-        #expect(run.results[1].accuracy.strictWordErrorRate > 0)
+        #expect((run.results[1].accuracy?.strictWordErrorRate ?? 0) > 0)
         #expect(run.results[1].resources.realtimeFactor == 1.25)
+    }
+
+    @Test func omitsWerAndCerWithoutHumanReferenceButStillScoresCriticalTerms() async {
+        let item = TranscriptionBenchmarkCase(
+            id: "pharmacology-no-reference",
+            audioID: "local://pharmacology.m4a",
+            audioDurationSeconds: 60,
+            criticalTerms: ["naloxone", "500 mg"]
+        )
+        let adapter = SimulatedTranscriptionAdapter(
+            engineID: "sim",
+            engineVersion: "1",
+            modelID: "small",
+            outputsByAudioID: [item.audioID: .init(
+                transcript: "naloxone à 500 mg",
+                processingDurationSeconds: 20,
+                passageCount: 3
+            )],
+            configuration: .init(
+                modelVariant: "openai_whisper-small",
+                parameters: ["language": "fr", "chunking": "vad"]
+            )
+        )
+
+        let result = await TranscriptionBenchmarkRunner().run(cases: [item], adapters: [adapter]).results[0]
+
+        #expect(result.accuracy == nil)
+        #expect(result.criticalTermRecall == 1)
+        #expect(result.passageCount == 3)
+        #expect(result.configuration?.modelVariant == "openai_whisper-small")
     }
 
     @Test func missingSimulationIsReportedWithoutStoppingOtherCases() async {
@@ -54,7 +84,7 @@ struct TranscriptionBenchmarkRunnerTests {
         let run = await runner.run(cases: [item], adapters: [adapter], machine: machine)
         let data = try runner.encodedReport(run)
         let decoded = try JSONDecoder.withISO8601.decode(TranscriptionBenchmarkRun.self, from: data)
-        #expect(decoded.schemaVersion == 1)
+        #expect(decoded.schemaVersion == 2)
         #expect(decoded.machine == machine)
         #expect(decoded.results[0].resources.realtimeFactor == 0.2)
     }

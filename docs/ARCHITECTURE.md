@@ -10,25 +10,26 @@
    concret publie explicitement son propre état.
 4. **Local d'abord** : audio, transcription, métadonnées et journaux restent sur
    le Mac. Seuls les textes nécessaires partent vers le fournisseur choisi.
-5. **Sortie déterministe** : l'IA renvoie des données structurées ; Scrib rend le
-   DOCX localement. Le modèle ne fabrique pas directement le fichier final.
-6. **Choix réversibles** : transcription, IA, recherche, extraction de supports,
-   DOCX et stockage sont derrière des protocoles.
+5. **Sortie déterministe préparée** : le module DOCX reçoit des données
+   structurées et produit localement le fichier Word ; il n'est pas encore
+   déclenché par l'interface.
+6. **Frontières utiles** : microphone, transcription, stockage, fournisseur IA
+   et services système sont derrière des protocoles. Les abstractions sans
+   implémentation ou consommateur ne sont pas conservées.
 
 ## 2. Vue d'ensemble
 
 ```mermaid
 flowchart LR
-    UI["SwiftUI + menu macOS"] --> APP["Cas d'usage"]
-    APP --> AUDIO["AVFoundation"]
-    APP --> ASR["Transcription locale interchangeable"]
-    APP --> SUPPORTS["Extraction de supports"]
-    APP --> CLOUD["IA cloud + sortie JSON"]
-    CLOUD --> SOURCES["Recherche à domaines autorisés"]
-    APP --> DOCX["Rendu OOXML local"]
-    APP --> FILES["Stockage local + iCloud Drive"]
-    AUDIO --> TRACKER["Suivi d’activité"]
-    ASR --> TRACKER
+    UI["SwiftUI + menu macOS"] --> RECORDING["RecordingWorkflow"]
+    UI --> TRANSCRIPTION["LocalTranscriptionWorkflow"]
+    UI --> SUPPORTS["Import de supports"]
+    RECORDING --> AUDIO["AVAudioRecorder"]
+    RECORDING --> FILES["Stockage local"]
+    TRANSCRIPTION --> ASR["WhisperKit"]
+    TRANSCRIPTION --> FILES
+    RECORDING --> TRACKER["Suivi d’activité"]
+    TRANSCRIPTION --> TRACKER
     TRACKER --> STORE["SwiftData local"]
 ```
 
@@ -42,28 +43,25 @@ module ne connaît ni SwiftUI, ni AVFoundation, ni le réseau.
 
 ### `ScribApplication`
 
-Cas d'usage et ports : démarrer/arrêter l'enregistrement, lancer la transcription
-locale, corriger la transcription, régénérer un document et décider du sort de
-l'audio. Ils couvrent aussi la confirmation d'autorisation par enseignant et la
-levée manuelle d'une alerte de données patient.
+Cas d'usage et ports : enregistrement, transcription locale, édition de la
+transcription, import de supports, confidentialité et suivi d'activité. La
+génération IA structurée et le rendu DOCX y sont testés séparément, sans action
+utilisateur ni orchestration dans le parcours de l'application.
 `ProcessingActivityTracker` est un `actor` de persistance : il reçoit les états
 émis par l’enregistrement et la transcription locale. Il ne planifie ni ne lance
 d’autres traitements.
 
 ### `ScribInfrastructure`
 
-Adaptateurs concrets, ajoutés progressivement :
+Adaptateurs concrets présents dans le dépôt :
 
 - `AVFoundationAudioRecorder` ;
-- `SwiftDataCourseRepository` ;
-- `LocalTranscriptionAdapter` ;
-- `CloudGenerationAdapter` ;
-- `AllowlistedResearchAdapter` ;
-- `OfficeSupportExtractor` et `VisionSupportExtractor` ;
+- `SwiftDataProcessingJobRepository` ;
+- `WhisperKitTranscriptionEngine` et `WhisperKitModelManager` ;
+- `LocalSupportDocumentStore` et `LocalSupportDocumentExtractor` ;
 - `OOXMLDocumentRenderer` ;
-- `LocalCourseFileStore` et `ICloudPublisher` ;
-- `KeychainSecretStore` ;
-- `UserNotificationAdapter`.
+- `MacCourseFileStore`, `LocalRecordingSessionStore` et `LocalTranscriptionStore` ;
+- `MacKeychainSecretStore` et `OpenAIResponsesAdapter`.
 
 ### `ScribApp`
 
@@ -100,56 +98,43 @@ qui n’existait pas et ne doivent donc plus apparaître comme des travaux en at
 - `RecordingSegment` : URL locale, ordre, durée, empreinte, état de récupération.
 - `ProcessingJob` : activité réelle, statut, progression éventuellement signalée,
   motif de suspension ou erreur.
-- `Artifact` : type, URL, empreinte, version source et état iCloud.
-- `TranscriptRevision` : texte horodaté, locuteurs, incertitudes et version.
+- `TranscriptDraft` : texte horodaté, locuteurs, incertitudes et version.
 - `SupportDocument` : type, URL, extraction structurée persistée et éléments
   illisibles.
 - `SupportDocumentExtraction` : titre, texte ordonné, niveaux de titres, listes,
   tableaux, pages PDF, nombre d’images, provenance et avertissements.
-- `UsageRecord` : fournisseur, modèle, jetons, coût estimé et mois.
-- `Incident` : catégorie, code, message, extrait optionnel et résolution.
 - `PrivacyReview` : alertes locales de données potentiellement identifiantes,
   décision manuelle et date de validation avant tout envoi cloud.
 
-SwiftData stocke les métadonnées et références de fichiers. Les audios et grands
-artefacts ne sont jamais placés dans la base.
+SwiftData est utilisé pour le suivi des activités. Les manifestes de session,
+les transcriptions et les supports ont leur propre stockage local ; les audios
+ne sont jamais placés dans SwiftData.
 
 ## 6. Stockage
 
 ```text
 ~/Library/Application Support/Scrib/
-├── Store/                         base locale
 ├── Courses/
 │   └── <course-id>/
-│       ├── audio/                 segments et audio fusionné
-│       ├── transcript/            versions horodatées
-│       ├── supports/              copies de travail
-│       ├── output/                DOCX locaux validés
-│       └── temp/                  supprimé après succès
+│       ├── audio/                 segments M4A et manifeste de session
+│       ├── transcription/         transcription locale persistée
+│       └── supports/              copies de travail
 ├── Models/                        modèle de transcription choisi
-└── Diagnostics/                   journaux bornés
-
-iCloud Drive/Scrib/
-└── <Semestre – UE – titre – date>/
-    ├── Cours complet.docx
-    └── Fiche de révision.docx
+└── AI/                             historique de génération, non raccordé à l’UI
 ```
 
-Les écritures utilisent un fichier temporaire dans le même volume, puis un
-remplacement atomique. La coordination de fichiers protège les interactions avec
-Word et iCloud. La base locale est la source de vérité ; iCloud ne sert qu'à
-publier les deux documents finaux.
+Chaque adaptateur possède sa propre persistance locale : manifestes de session,
+transcriptions et suivi SwiftData. Il n'existe pas de source de vérité globale,
+ni de publication iCloud des DOCX dans l'alpha actuel.
 
 ## 7. Enregistrement audio
 
-`AVAudioEngine` fournit le flux du périphérique d'entrée. L'adaptateur écrit des
-segments récupérables et mesure le niveau sans traitement coûteux sur le thread
-temps réel. La compression, la fusion et le nettoyage sont différés.
+`AVAudioRecorder` enregistre directement des segments AAC récupérables et fournit
+le niveau audio. L'adaptateur demande l'autorisation microphone via
+`AVCaptureDevice`, observe les déconnexions et écrit un manifeste de session.
 
 Règles d'implémentation :
 
-- aucun accès disque, log détaillé ou allocation importante dans le callback
-  audio ;
 - segment courant finalisé régulièrement, au maximum toutes les dix minutes ;
 - observation des changements de périphérique et bascule contrôlée ;
 - inhibition de veille limitée à l'enregistrement ;
@@ -158,16 +143,21 @@ Règles d'implémentation :
 ## 8. Transcription locale
 
 Le port `TranscriptionEngine` masque le moteur concret. Il reçoit désormais une
-requête explicite contenant le cours, les segments audio ordonnés, la langue et
-le modèle ; il renvoie les passages, mots et horodatages avec la provenance et
-les métriques. `LocalTranscriptionCoordinator` assemble et déduplique les
-frontières, construit le `TranscriptDraft` puis persiste atomiquement le résultat
-brut. Aucun chemin global ni singleton audio n’est utilisé.
+requête explicite contenant le cours, les segments audio ordonnés, la langue, le
+modèle et un éventuel contexte initial borné ; il renvoie les passages, mots et
+horodatages avec la provenance et les métriques. `LocalTranscriptionCoordinator`
+conserve ce résultat brut, construit une version contextualisée séparée et
+journalise toute suppression de token ou déduplication. Une frontière n'est
+dédupliquée que si les mots et leurs timestamps permettent de recaler le passage.
+Aucun chemin global ni singleton audio n’est utilisé.
 
-La v0.1.0-alpha.2 fournit `WhisperKitTranscriptionEngine` comme adaptateur de
-benchmark. Les segments M4A de dix minutes au maximum sont traités un par un,
-avec français forcé, timestamps de mots et un seul worker, afin de borner la
-mémoire. Le modèle est déchargé après le traitement. Le téléchargement est une
+L'alpha fournit `WhisperKitTranscriptionEngine` au parcours de transcription
+locale. Les segments M4A de dix minutes au maximum sont traités un par un,
+avec français forcé, température initiale 0, cinq replis de 0,2, seuils WhisperKit
+par défaut (compression 2,4, log-probabilité -1, silence 0,6), VAD, timestamps de
+mots et un seul worker. Les métadonnées du cours et un petit glossaire sont
+encodés comme prompt de décodage ; ils ne corrigent jamais le texte après coup.
+Le modèle est déchargé après le traitement. Le téléchargement est une
 action utilisateur séparée et les modèles vivent sous Application Support.
 
 Deux candidats natifs restent à benchmarker sur la machine finale : WhisperKit/Core ML et
@@ -175,7 +165,8 @@ whisper.cpp/Core ML + Metal. MLX Whisper reste une référence de recherche, car
 son exemple officiel actuel dépend de Python et ne peut pas être livré tel quel
 sur le Mac cible. Le choix final ne doit imposer ni Python ni Homebrew.
 
-Le benchmark compare Small, Medium quantifié et Large-v3-Turbo quantifié avec :
+Le benchmark compare d'abord Small avec et sans contexte, puis Small et Medium
+sur le même contenu avec :
 
 - fidélité de termes médicaux et horodatages ;
 - pic mémoire et pression mémoire ;
@@ -185,7 +176,7 @@ Le benchmark compare Small, Medium quantifié et Large-v3-Turbo quantifié avec 
 
 Contraintes actuellement appliquées : lot de taille 1, traitement séquentiel et
 libération du modèle après la transcription. La suspension thermique et la reprise
-par blocs restent des évolutions à relier à un futur orchestrateur réel.
+par blocs restent des évolutions du workflow de transcription.
 
 La diarisation est une étape séparée et optionnelle : une mauvaise attribution de
 locuteur ne doit jamais modifier les mots reconnus.
@@ -215,7 +206,8 @@ Les appels réseau sont rejouables avec une clé d'idempotence. Les délais util
 une reprise exponentielle avec dispersion, mais aucun fournisseur secondaire
 n'est sélectionné sans action explicite.
 
-`StructuredGenerationOrchestrator` applique cet ordre : empreinte et barrière de
+`StructuredGenerationOrchestrator`, testé mais non raccordé à l'interface,
+applique cet ordre : empreinte et barrière de
 confidentialité, contrôle d’idempotence, projection budgétaire, lecture de la clé,
 appel de l’adaptateur choisi, validation locale du JSON, conversion documentaire
 et persistance du résultat avec son usage. Un résultat déjà enregistré est
@@ -231,8 +223,9 @@ campagne d’essais.
 ## 10. Rendu DOCX
 
 `OOXMLDocumentRenderer` reçoit un modèle interne validé et construit localement un
-package Office Open XML. Cette approche évite de confier la mise en page finale au
-modèle et n'exige pas que Word soit piloté pendant le traitement.
+package Office Open XML. Il est couvert par des tests mais n'est pas encore
+appelé par l'application ; aucune exportation DOCX n'est donc promise à
+l'utilisateur.
 
 Le renderer prend en charge : page A4, styles, titres, sommaire statique cliquable,
 en-têtes et pieds de page, pagination, tableaux, images accessibles, hyperliens,
@@ -297,7 +290,7 @@ n'est pas implémenté dans le socle actuel.
 
 ## 14. Références techniques
 
-- [AVAudioEngine — Apple](https://developer.apple.com/documentation/avfaudio/avaudioengine)
+- [AVAudioRecorder — Apple](https://developer.apple.com/documentation/avfaudio/avaudiorecorder)
 - [ModelContainer / SwiftData — Apple](https://developer.apple.com/documentation/swiftdata/modelcontainer)
 - [ProcessInfo — Apple](https://developer.apple.com/documentation/foundation/processinfo)
 - [MLX Swift — Apple ML Research](https://github.com/ml-explore/mlx-swift)

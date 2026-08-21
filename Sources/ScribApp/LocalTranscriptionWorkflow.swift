@@ -10,13 +10,14 @@ final class LocalTranscriptionWorkflow: ObservableObject {
     @Published var transcriptDraft: TranscriptDraft?
     @Published var transcriptSearch = ""
     @Published var transcriptFilter: TranscriptPassageFilter = .all
-    @Published var selectedModel: LocalTranscriptionModelID = .tinyMultilingual
+    @Published var selectedModel: LocalTranscriptionModelID = .smallMultilingual
     @Published private(set) var modelStatus = TranscriptionModelStatus(
-        modelID: .tinyMultilingual, availability: .notDownloaded)
+        modelID: .smallMultilingual, availability: .notDownloaded)
     @Published private(set) var progress = LocalTranscriptionProgress(stage: .idle)
     @Published private(set) var lastResult: LocalTranscriptionResult?
     @Published private(set) var isDownloadingModel = false
     @Published private(set) var isRunning = false
+    private var lastTransformations: [TranscriptTransformation] = []
 
     var reportError: @MainActor (String) -> Void = { _ in }
     var reportNotice: @MainActor (String) -> Void = { _ in }
@@ -44,10 +45,10 @@ final class LocalTranscriptionWorkflow: ObservableObject {
         self.processingTracker = processingTracker
     }
 
-    var models: [TranscriptionModelDescriptor] { LocalTranscriptionModelCatalog.alphaModels }
+    var models: [TranscriptionModelDescriptor] { LocalTranscriptionModelCatalog.userFacingModels }
     var selectedModelDescriptor: TranscriptionModelDescriptor {
         LocalTranscriptionModelCatalog.descriptor(for: selectedModel)
-            ?? LocalTranscriptionModelCatalog.alphaModels[0]
+            ?? LocalTranscriptionModelCatalog.userFacingModels[0]
     }
     var filteredPassages: [TranscriptPassage] {
         guard let transcriptDraft else { return [] }
@@ -66,7 +67,12 @@ final class LocalTranscriptionWorkflow: ObservableObject {
     {
         guard let course, let lastResult, let realDraft else { return nil }
         return StoredLocalTranscription(
-            course: course, recordingSegments: segments, result: lastResult, draft: realDraft)
+            course: course,
+            recordingSegments: segments,
+            result: lastResult,
+            draft: realDraft,
+            transformations: lastTransformations
+        )
     }
 
     func resetForNewRecording() {
@@ -74,14 +80,17 @@ final class LocalTranscriptionWorkflow: ObservableObject {
         lastResult = nil
         realDraft = nil
         transcriptDraft = nil
+        lastTransformations = []
     }
 
     func restoreLatest() async -> StoredLocalTranscription? {
         do {
             guard let stored = try await coordinator.latestTranscription() else { return nil }
             lastResult = stored.result
-            realDraft = stored.draft
-            transcriptDraft = stored.draft
+            lastTransformations = stored.transformations ?? []
+            let userFacingDraft = WhisperTranscriptTextNormalizer.normalize(stored.draft)
+            realDraft = userFacingDraft
+            transcriptDraft = userFacingDraft
             return stored
         } catch {
             reportError(
@@ -259,6 +268,7 @@ final class LocalTranscriptionWorkflow: ObservableObject {
                 }
                 guard transcriptionGeneration.accepts(id), !Task.isCancelled else { return }
                 lastResult = stored.result
+                lastTransformations = stored.transformations ?? []
                 realDraft = stored.draft
                 transcriptDraft = stored.draft
                 progress = .init(
