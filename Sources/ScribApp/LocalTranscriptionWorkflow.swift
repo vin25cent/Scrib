@@ -351,12 +351,13 @@ final class LocalTranscriptionWorkflow: ObservableObject {
             transcriptionProgressGate.accept(operationID: operationID, sequence: sequence)
         else { return }
         progress = update
+        guard let fractionCompleted = update.fractionCompleted else { return }
         let tracker = processingTracker
         let observedAt = Date()
         Task {
             try? await tracker.updateProgress(
                 courseID: courseID, activity: .localTranscription,
-                progress: update.fractionCompleted,
+                progress: fractionCompleted,
                 at: observedAt)
         }
     }
