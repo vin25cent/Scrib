@@ -5,7 +5,7 @@ transcrire localement, puis produire automatiquement deux documents Microsoft
 Word : un cours structuré fidèle et une fiche de révision.
 
 Le dépôt contient la spécification, l'architecture et l'alpha Swift de
-l'enregistrement, de la transcription locale, de la file persistante, des
+l'enregistrement, de la transcription locale, du suivi persistant d’activités, des
 métriques et du rendu DOCX. WhisperKit est intégré comme premier moteur
 expérimental de benchmark ; le choix définitif reste ouvert. Tous les appels
 payants sont désactivés par défaut.
@@ -23,7 +23,7 @@ payants sont désactivés par défaut.
 - [Barrière locale de confidentialité](docs/PRIVACY_GATE.md)
 - [Génération IA](docs/AI_GENERATION.md)
 - [Installer l’alpha sur macOS](docs/INSTALLATION_ALPHA_MACOS.md)
-- [Notes de version 0.1.0-alpha.10](docs/RELEASE_NOTES_0.1.0_ALPHA.10.md)
+- [Notes de version 0.1.0-alpha.11](docs/RELEASE_NOTES_0.1.0_ALPHA.11.md)
 
 ## Structure
 
@@ -53,7 +53,7 @@ local ou ffmpeg externe n’est requis par l’application distribuée.
 ### Tests du cœur sur Windows
 
 Windows ne peut pas produire l'application macOS, mais il peut compiler et tester
-les modules de domaine, d'orchestration et d'infrastructure :
+les modules de domaine, d’application et d’infrastructure :
 
 ```powershell
 .\Scripts\Test-Windows.ps1
@@ -82,10 +82,10 @@ au premier lancement.
 - autorisation d'enregistrer mémorisée par enseignant ;
 - moteur AVFoundation AAC mono, vu-mètre, pause/reprise et segments récupérables
   intégrés et validés sur le microphone du Mac cible ;
-- file FIFO persistée avec SwiftData, checkpoints, reprise après interruption et
-  anti-doublon ;
-- tableau de bord de suivi avec filtres, compteurs, détail d’un cours, progression
-  et chronologie des checkpoints ;
+- suivi persistant SwiftData des activités réellement exécutées : enregistrement
+  et transcription locale ;
+- tableau de bord de suivi avec filtres, compteurs, détail d’activité et
+  progression lorsqu’elle est fournie par le workflow réel ;
 - éditeur local de transcription avec recherche, corrections, marqueurs et
   renvois vers les horodatages audio ;
 - import persistant des supports enseignant Word, PDF, présentation, tableur et
@@ -95,8 +95,8 @@ au premier lancement.
   résultat persisté pour les traitements réels ;
 - écran de confidentialité avec aperçus masqués et approbation manuelle liée à
   l’empreinte exacte de la transcription ;
-- surveillance secteur, réseau, température et pression mémoire, avec préemption
-  immédiate par un nouvel enregistrement ;
+- mesures secteur, réseau, température et pression mémoire pour les benchmarks ;
+  elles ne pilotent pas encore la transcription ni le suivi ;
 - métriques de benchmark de transcription et corpus S1 préparés pour les UE 2.1,
   2.2, 2.4 et 2.11, sans média versionné ;
 - transcription locale réelle expérimentale par WhisperKit 1.0.0, à partir des

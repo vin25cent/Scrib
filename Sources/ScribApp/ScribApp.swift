@@ -12,26 +12,30 @@ struct ScribDesktopApp: App {
     init() {
         let environment = AppEnvironment.live()
         self.environment = environment
-        let model = RecordingViewModel(
+        let recording = RecordingWorkflow(
             recorder: environment.recordingSessionStore.map { AVFoundationAudioRecorder(sessionStore: $0) }
                 ?? AVFoundationAudioRecorder(),
             fileStore: MacCourseFileStore(),
             teacherStore: UserDefaultsTeacherAuthorizationStore(),
-            queueCoordinator: environment.queueCoordinator,
+            processingTracker: environment.processingTracker,
+            recordingSessionStore: environment.recordingSessionStore
+        )
+        let transcription = LocalTranscriptionWorkflow(
+            coordinator: environment.transcriptionCoordinator,
+            processingTracker: environment.processingTracker
+        )
+        let model = RecordingViewModel(
+            recording: recording,
+            transcription: transcription,
             supportImporter: environment.supportImporter,
             aiSecretStore: environment.aiSecretStore,
             aiPreferencesStore: environment.aiPreferencesStore,
-            transcriptionCoordinator: environment.transcriptionCoordinator,
-            recordingSessionStore: environment.recordingSessionStore,
             startupWarning: environment.persistenceWarning
         )
         _model = StateObject(
             wrappedValue: model
         )
         applicationDelegate.recordingModel = model
-        Task {
-            await MacProcessingNotificationSender().requestAuthorization()
-        }
     }
 
     var body: some Scene {

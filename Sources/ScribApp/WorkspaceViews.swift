@@ -228,6 +228,7 @@ struct SupportDocumentsView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .disabled(model.isImportingSupportDocument || model.isDeletingSupportDocument)
             }
             HStack(spacing: 8) {
                 formatChip("Word", icon: "doc.text")
@@ -265,13 +266,14 @@ struct SupportDocumentsView: View {
                         }
                         Spacer()
                         Button("Ouvrir") { model.openSupportDocument(document) }
-                            .disabled(document.localURL == nil)
+                            .disabled(document.localURL == nil || model.isDeletingSupportDocument)
                         Button(role: .destructive) {
                             model.deleteSupportDocument(document)
                         } label: {
                             Image(systemName: "trash")
                         }
                         .help("Supprimer la copie locale")
+                        .disabled(model.isImportingSupportDocument || model.isDeletingSupportDocument)
                     }
                     .scribCard(padding: 18)
                 }
@@ -319,6 +321,13 @@ struct SupportDocumentsView: View {
             Label(failure, systemImage: "exclamationmark.circle.fill")
                 .font(.caption)
                 .foregroundStyle(.orange)
+        } else if [.presentation, .spreadsheet, .image].contains(document.kind) {
+            Label(
+                "Copie locale conservée · extraction de contenu non disponible pour ce format",
+                systemImage: "info.circle.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         } else {
             Label(
                 "Copie locale conservée · extraction non requise",

@@ -43,11 +43,12 @@ Mac et peut prendre autant de temps que nécessaire.
 6. Scrib affiche en permanence la durée et le niveau sonore.
 7. Pause/Reprendre crée des segments techniques séparés, rattachés au même cours
    et ordonnés chronologiquement. Chaque nouvelle date crée un cours distinct.
-8. À la fin, le cours entre dans une file d'attente persistante.
-9. Le traitement démarre lorsque le Mac est branché et qu'Internet est disponible.
-10. Scrib transcrit localement, génère le cours et la fiche, puis synchronise les
-   deux DOCX dans iCloud Drive.
-11. Une notification de fin demande si l'audio local doit être conservé ou
+8. À la fin, Scrib conserve le suivi de l’enregistrement terminé ; aucune étape
+   ultérieure n’est automatiquement planifiée dans l’alpha actuel.
+9. L’utilisateur démarre explicitement la transcription locale disponible.
+10. La génération du cours, de la fiche et la synchronisation iCloud restent des
+   objectifs de V1, pas des effets de cette action aujourd’hui.
+11. À terme, une notification de fin demandera si l'audio local doit être conservé ou
     supprimé. La transcription reste associée au cours.
 
 ## 4. Exigences fonctionnelles
@@ -93,7 +94,7 @@ Mac et peut prendre autant de temps que nécessaire.
   un refus empêche le nouvel enregistrement. Un audio non traité n'est jamais
   proposé à l'écrasement.
 
-### 4.3 Orchestration après le cours
+### 4.3 Orchestration après le cours — cible V1, non implémentée dans l’alpha
 
 - Une seule étape lourde s'exécute à la fois et un seul cours est traité à la fois.
 - La file suit l'ordre du plus ancien au plus récent.

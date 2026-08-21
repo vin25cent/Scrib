@@ -42,7 +42,7 @@ struct ContentView: View {
                 case .localTranscription:
                     LocalTranscriptionView(model: model)
                 case .queue:
-                    ProcessingQueueView(model: model)
+                    ProcessingTrackingView(model: model)
                 case .transcript:
                     TranscriptEditorView(model: model)
                 case .supports:
@@ -80,7 +80,7 @@ struct ContentView: View {
             Text("Quitter maintenant finalisera le segment courant avant de fermer Scrib.")
         }
         .task {
-            await model.prepareQueue()
+            await model.prepareProcessingTracking()
         }
         .tint(ScribDesign.accent)
     }
@@ -448,17 +448,16 @@ private struct SegmentsView: View {
 }
 
 
-private struct ProcessingQueueView: View {
+private struct ProcessingTrackingView: View {
     @ObservedObject var model: RecordingViewModel
 
     var body: some View {
         VStack(spacing: 0) {
-            conditionBar
             dashboardHeader
             if model.processingJobs.isEmpty {
                 PlaceholderView(
-                    title: "Aucun cours à suivre",
-                    message: "Les cours terminés apparaîtront ici avec leur progression et leur dernier checkpoint valide.",
+                    title: "Aucune activité à suivre",
+                    message: "Les enregistrements et transcriptions locales réellement exécutés par Scrib apparaîtront ici.",
                     systemImage: "clock.arrow.circlepath"
                 )
             } else {
@@ -471,22 +470,22 @@ private struct ProcessingQueueView: View {
             }
         }
         .background(ScribDesign.canvas)
-        .navigationTitle("Suivi des cours")
+        .navigationTitle("Suivi d’activité")
     }
 
     private var dashboardHeader: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Suivi des cours")
+                    Text("Suivi d’activité")
                         .font(.title2.weight(.semibold))
-                    Text("Visualisez chaque traitement depuis l’enregistrement jusqu’aux documents finaux.")
+                    Text("Ce suivi reflète les activités réellement exécutées ; il ne lance aucun traitement.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button {
-                    Task { await model.reloadQueue() }
+                    Task { await model.reloadProcessingTracking() }
                 } label: {
                     Label("Actualiser", systemImage: "arrow.clockwise")
                 }
@@ -495,7 +494,8 @@ private struct ProcessingQueueView: View {
             HStack(spacing: 12) {
                 metricCard("Total", value: model.trackingSummary.totalCount, icon: "books.vertical", color: ScribDesign.accent)
                 metricCard("En cours", value: model.trackingSummary.activeCount, icon: "clock.fill", color: ScribDesign.accentDark)
-                metricCard("À vérifier", value: model.trackingSummary.attentionCount, icon: "exclamationmark.triangle.fill", color: .orange)
+                metricCard("Suspendus", value: model.trackingSummary.suspendedCount, icon: "pause.circle.fill", color: .orange)
+                metricCard("Erreurs", value: model.trackingSummary.failedCount, icon: "exclamationmark.triangle.fill", color: .red)
                 metricCard("Terminés", value: model.trackingSummary.completedCount, icon: "checkmark.circle.fill", color: .green)
             }
 
@@ -559,101 +559,16 @@ private struct ProcessingQueueView: View {
     @ViewBuilder
     private var courseDetail: some View {
         if let job = model.selectedProcessingJob {
-            CourseTrackingDetail(
-                job: job,
-                timeline: model.trackingTimeline(for: job),
-                retry: { model.retry(job) },
-                refresh: { Task { await model.reloadQueue() } }
-            )
+            CourseTrackingDetail(job: job, refresh: { Task { await model.reloadProcessingTracking() } })
         } else {
             PlaceholderView(
                 title: "Sélectionnez un cours",
-                message: "Le détail de son traitement apparaîtra ici.",
+                message: "Le détail de l’activité suivie apparaîtra ici.",
                 systemImage: "doc.text.magnifyingglass"
             )
         }
     }
 
-    private var conditionBar: some View {
-        HStack(spacing: 18) {
-            conditionLabel(
-                model.systemConditions.isOnExternalPower,
-                ready: "Secteur",
-                blocked: "Batterie",
-                icon: "powerplug"
-            )
-            conditionLabel(
-                model.systemConditions.isNetworkAvailable,
-                ready: "Internet",
-                blocked: "Hors ligne",
-                icon: "network"
-            )
-            conditionLabel(
-                model.systemConditions.thermalCondition == .nominal
-                    || model.systemConditions.thermalCondition == .fair,
-                ready: "Température normale",
-                blocked: "Température élevée",
-                icon: "thermometer.medium"
-            )
-            conditionLabel(
-                model.systemConditions.memoryCondition == .normal,
-                ready: "Mémoire disponible",
-                blocked: "Pression mémoire",
-                icon: "memorychip"
-            )
-            Spacer()
-            if !model.systemConditions.canRunHeavyProcessing {
-                Text("Traitement suspendu")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
-            } else {
-                Text("Conditions réunies")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.green)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(ScribDesign.mutedSurface)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(ScribDesign.border)
-                .frame(height: 1)
-        }
-    }
-
-    private func conditionLabel(
-        _ isReady: Bool,
-        ready: String,
-        blocked: String,
-        icon: String
-    ) -> some View {
-        Label(isReady ? ready : blocked, systemImage: icon)
-            .font(.caption)
-            .foregroundStyle(isReady ? .green : .orange)
-    }
-
-    private func statusIcon(for job: ProcessingJob) -> some View {
-        let icon: String
-        let color: Color
-        switch job.status {
-        case .completed:
-            icon = "checkmark.circle.fill"
-            color = .green
-        case .needsAttention:
-            icon = "exclamationmark.triangle.fill"
-            color = .red
-        case .suspended:
-            icon = "pause.circle.fill"
-            color = .orange
-        default:
-            icon = "clock.fill"
-            color = .blue
-        }
-        return Image(systemName: icon)
-            .font(.title2)
-            .foregroundStyle(color)
-    }
 }
 
 private struct CourseTrackingRow: View {
@@ -673,13 +588,17 @@ private struct CourseTrackingRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                ProgressView(value: job.progress)
-                    .tint(statusColor)
+                if let progress = job.progress {
+                    ProgressView(value: progress)
+                        .tint(statusColor)
+                }
                 HStack {
-                    Text(job.status.displayName)
+                    Text("\(job.activity.displayName) · \(job.status.displayName)")
                     Spacer()
-                    Text(job.progress, format: .percent.precision(.fractionLength(0)))
-                        .monospacedDigit()
+                    if let progress = job.progress {
+                        Text(progress, format: .percent.precision(.fractionLength(0)))
+                            .monospacedDigit()
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -694,20 +613,18 @@ private struct CourseTrackingRow: View {
     private var statusIcon: String {
         switch job.status {
         case .completed: "checkmark.circle.fill"
-        case .needsAttention: "exclamationmark.triangle.fill"
+        case .failed: "exclamationmark.triangle.fill"
         case .suspended: "pause.circle.fill"
         case .processing: "gearshape.2.fill"
-        case .recording: "record.circle.fill"
-        default: "clock.fill"
+        case .pending: "clock.fill"
         }
     }
 
     private var statusColor: Color {
         switch job.status {
         case .completed: .green
-        case .needsAttention: .red
+        case .failed: .red
         case .suspended: .orange
-        case .recording: .red
         default: .blue
         }
     }
@@ -715,8 +632,6 @@ private struct CourseTrackingRow: View {
 
 private struct CourseTrackingDetail: View {
     let job: ProcessingJob
-    let timeline: [CourseTrackingStageItem]
-    let retry: () -> Void
     let refresh: () -> Void
 
     var body: some View {
@@ -724,10 +639,9 @@ private struct CourseTrackingDetail: View {
             VStack(alignment: .leading, spacing: 22) {
                 detailHeader
                 progressCard
-                if !job.suspensionReasons.isEmpty || job.lastError != nil {
+                if job.suspensionReason != nil || job.lastError != nil {
                     attentionCard
                 }
-                timelineCard
                 informationCard
             }
             .padding(28)
@@ -769,17 +683,21 @@ private struct CourseTrackingDetail: View {
 
     private var progressCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ScribSectionHeading("Progression globale", icon: "chart.bar.fill")
+            ScribSectionHeading("Activité suivie", icon: "chart.bar.fill")
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text(job.stage?.displayName ?? progressDescription)
+                    Text(job.activity.displayName)
                         .font(.headline)
                     Spacer()
-                    Text(job.progress, format: .percent.precision(.fractionLength(0)))
-                        .font(.headline.monospacedDigit())
+                    if let progress = job.progress {
+                        Text(progress, format: .percent.precision(.fractionLength(0)))
+                            .font(.headline.monospacedDigit())
+                    }
                 }
-                ProgressView(value: job.progress)
-                    .tint(statusColor)
+                if let progress = job.progress {
+                    ProgressView(value: progress)
+                        .tint(statusColor)
+                }
                 HStack {
                     Text(progressDescription)
                     Spacer()
@@ -796,8 +714,8 @@ private struct CourseTrackingDetail: View {
         VStack(alignment: .leading, spacing: 16) {
             ScribSectionHeading("Attention requise", icon: "exclamationmark.triangle.fill")
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(job.suspensionReasons, id: \.self) { reason in
-                    Label(reason.displayName, systemImage: "pause.circle.fill")
+                if let reason = job.suspensionReason {
+                    Label(reason, systemImage: "pause.circle.fill")
                         .foregroundStyle(.orange)
                 }
                 if let error = job.lastError {
@@ -805,25 +723,8 @@ private struct CourseTrackingDetail: View {
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
-                if job.status == .needsAttention || job.status == .suspended {
-                    Button("Relancer le traitement", action: retry)
-                        .buttonStyle(.borderedProminent)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .scribCard()
-    }
-
-    private var timelineCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ScribSectionHeading("Étapes du traitement", icon: "list.bullet.clipboard")
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(timeline.indices, id: \.self) { index in
-                    StageTimelineRow(item: timeline[index], isLast: index == timeline.count - 1)
-                }
-            }
-            .padding(.horizontal, 8)
         }
         .scribCard()
     }
@@ -833,11 +734,7 @@ private struct CourseTrackingDetail: View {
             ScribSectionHeading("Informations", icon: "info.circle.fill")
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
                 infoRow("Créé", value: job.createdAt.formatted(date: .abbreviated, time: .shortened))
-                infoRow("Tentatives", value: "\(job.attemptCount)")
-                infoRow("Checkpoints", value: "\(job.checkpoints.count) sur \(ProcessingStage.allCases.count)")
-                if let nextAttemptAt = job.nextAttemptAt {
-                    infoRow("Prochaine tentative", value: nextAttemptAt.formatted(date: .omitted, time: .shortened))
-                }
+                infoRow("Dernière mise à jour", value: job.updatedAt.formatted(date: .abbreviated, time: .shortened))
             }
         }
         .scribCard()
@@ -854,85 +751,20 @@ private struct CourseTrackingDetail: View {
 
     private var progressDescription: String {
         switch job.status {
-        case .completed: "Traitement terminé"
-        case .needsAttention: "Une intervention est nécessaire"
-        case .suspended: "Traitement suspendu"
-        case .queued: "En attente de traitement"
-        case .processing: "Traitement en cours"
-        default: job.status.displayName
+        case .pending: "Activité demandée"
+        case .processing: "Activité en cours"
+        case .suspended: "Activité suspendue"
+        case .completed: "Activité terminée"
+        case .failed: "L’activité a échoué"
         }
     }
 
     private var statusColor: Color {
         switch job.status {
         case .completed: .green
-        case .needsAttention: .red
+        case .failed: .red
         case .suspended: .orange
-        case .recording: .red
         default: .blue
-        }
-    }
-}
-
-private struct StageTimelineRow: View {
-    let item: CourseTrackingStageItem
-    let isLast: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(spacing: 0) {
-                Image(systemName: icon)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(color)
-                    .frame(width: 28, height: 28)
-                    .background(color.opacity(0.12), in: Circle())
-                if !isLast {
-                    Rectangle()
-                        .fill(lineColor)
-                        .frame(width: 2, height: 34)
-                }
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.stage.displayName)
-                    .font(.headline)
-                Text(stateDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, 3)
-            Spacer()
-        }
-    }
-
-    private var icon: String {
-        switch item.state {
-        case .completed: "checkmark"
-        case .current: "arrow.right"
-        case .blocked: "pause.fill"
-        case .pending: "circle"
-        }
-    }
-
-    private var color: Color {
-        switch item.state {
-        case .completed: .green
-        case .current: .blue
-        case .blocked: .orange
-        case .pending: .secondary
-        }
-    }
-
-    private var lineColor: Color {
-        if case .completed = item.state { return .green.opacity(0.45) }
-        return .secondary.opacity(0.2)
-    }
-
-    private var stateDescription: String {
-        switch item.state {
-        case let .completed(date): "Terminé le \(date.formatted(date: .abbreviated, time: .shortened))"
-        case .current: "Étape actuelle"
-        case .blocked: "En attente de reprise"
-        case .pending: "À venir"
         }
     }
 }

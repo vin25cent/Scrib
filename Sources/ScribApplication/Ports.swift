@@ -56,11 +56,13 @@ public protocol TeacherAuthorizationStoring: AnyObject {
     func save(_ teacher: Teacher) throws
 }
 
-@MainActor
-public protocol SupportDocumentImporting: AnyObject {
-    func documents() -> [SupportDocument]
-    func importDocument(from sourceURL: URL) throws -> SupportDocument
-    func deleteDocument(id: UUID) throws
+/// File imports and extraction are deliberately isolated away from the UI actor.
+/// Implementations should keep disk I/O, archive parsing and manifest writes in
+/// their own concurrency domain.
+public protocol SupportDocumentImporting: AnyObject, Sendable {
+    func documents() async throws -> [SupportDocument]
+    func importDocument(from sourceURL: URL) async throws -> SupportDocument
+    func deleteDocument(id: UUID) async throws
 }
 
 public protocol SupportDocumentExtracting: Sendable {
@@ -130,28 +132,4 @@ public protocol ProcessingJobRepository: Sendable {
     func job(id: ProcessingJobID) async throws -> ProcessingJob?
     func jobs() async throws -> [ProcessingJob]
     func delete(id: ProcessingJobID) async throws
-}
-
-public struct ProcessingStepResult: Equatable, Sendable {
-    public var outputFingerprint: String?
-
-    public init(outputFingerprint: String? = nil) {
-        self.outputFingerprint = outputFingerprint
-    }
-}
-
-public protocol PipelineStepExecuting: Sendable {
-    func execute(
-        stage: ProcessingStage,
-        courseID: CourseID
-    ) async throws -> ProcessingStepResult
-}
-
-public protocol SystemConditionsMonitoring: Sendable {
-    func currentSnapshot() async -> SystemConditionSnapshot
-}
-
-public protocol ProcessingNotificationSending: Sendable {
-    func processingDidComplete(job: ProcessingJob) async
-    func processingNeedsAttention(job: ProcessingJob) async
 }

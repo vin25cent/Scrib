@@ -28,21 +28,3 @@ public actor InMemoryProcessingJobRepository: ProcessingJobRepository {
         storage[id] = nil
     }
 }
-
-public struct FixedSystemConditionMonitor: SystemConditionsMonitoring {
-    public var snapshot: SystemConditionSnapshot
-
-    public init(snapshot: SystemConditionSnapshot) {
-        self.snapshot = snapshot
-    }
-
-    public func currentSnapshot() async -> SystemConditionSnapshot {
-        snapshot
-    }
-}
-
-public struct NullProcessingNotificationSender: ProcessingNotificationSending {
-    public init() {}
-    public func processingDidComplete(job: ProcessingJob) async {}
-    public func processingNeedsAttention(job: ProcessingJob) async {}
-}

@@ -4,23 +4,18 @@ import Testing
 @testable import ScribDomain
 @testable import ScribInfrastructure
 
-@Test func swiftDataQueueRoundTripsCheckpointsAndErrors() async throws {
+@Test func swiftDataTrackingRoundTripsActivityAndState() async throws {
     let repository = try SwiftDataProcessingJobRepository(inMemory: true)
-    var job = ProcessingJob(
+    let job = ProcessingJob(
         courseID: CourseID(),
         courseTitle: "Pharmacologie",
         teachingUnit: "UE 2.11 — Pharmacologie et thérapeutiques",
+        activity: .localTranscription,
         status: .suspended,
-        stage: .transcribing,
-        progress: 0.3,
-        attemptCount: 2,
-        nextAttemptAt: Date().addingTimeInterval(60),
+        reportedProgress: 0.3,
+        suspensionReason: "Transcription annulée",
         lastError: "Connexion interrompue",
-        suspensionReasons: [.networkUnavailable]
     )
-    job.completeStage(.preparing, outputFingerprint: "prepared")
-    job.status = .suspended
-    job.stage = .transcribing
 
     try await repository.save(job)
     let restored = try await repository.job(id: job.id)

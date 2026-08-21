@@ -131,8 +131,7 @@ public struct SupportImportValidator: Sendable {
 }
 
 
-@MainActor
-public final class InMemorySupportDocumentStore: SupportDocumentImporting {
+public actor InMemorySupportDocumentStore: SupportDocumentImporting {
     private let validator: SupportImportValidator
     private let extractor: (any SupportDocumentExtracting)?
     private var storedDocuments: [SupportDocument] = []

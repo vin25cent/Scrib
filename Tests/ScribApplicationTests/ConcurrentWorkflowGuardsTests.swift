@@ -40,6 +40,21 @@ import Testing
     #expect(restarted != nil)
 }
 
+@Test func finalizedRecordingReturnsTheWorkflowToAnIdleState() throws {
+    var gate = RecordingStartGate()
+    let startResult = gate.beginStart()
+    let start = try #require(startResult)
+    let started = gate.recordingDidStart(id: start)
+    let didBeginStop = gate.beginStop()
+    #expect(started)
+    #expect(didBeginStop)
+
+    gate.stopDidFinish()
+
+    #expect(gate.state == .idle)
+    #expect(gate.startID == nil)
+}
+
 @Test func transcriptionCancellationInvalidatesItsLateCompletion() throws {
     var generation = LatestOperationGeneration()
     let cancelled = generation.begin()

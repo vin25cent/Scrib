@@ -20,23 +20,18 @@ Sortie : dépôt documenté, ouvrable dans Xcode et prêt pour des prototypes is
 Jalon : quatre heures d'enregistrement continu sans perte, avec récupération
 validée après arrêt forcé.
 
-## Phase 2 — File persistante et conditions système (socle implémenté)
+## Phase 2 — Suivi persistant des activités (socle implémenté)
 
-- SwiftData, machine d'états et checkpoints ;
-- secteur, réseau, thermique, mémoire, sommeil et reprise ;
-- menu macOS, progression, erreurs et notifications ;
-- préemption par un nouvel enregistrement.
+- SwiftData et suivi d’activité ;
+- états visibles, erreurs et annulations ;
+- progression seulement lorsqu’un workflow réel la fournit.
 
-Jalon : une file simulée de 30 heures traverse arrêts, veille et pannes réseau sans
-doublon.
+Jalon : l’enregistrement et la transcription locale publient des états fidèles,
+y compris après interruption de l’application.
 
-État : la persistance SwiftData, les checkpoints, l'ordre FIFO, l'anti-doublon,
-la reprise après interruption, le backoff, les conditions système et la
-préemption sont implémentés. Le tableau de bord permet de filtrer les cours,
-consulter leur progression, leurs six étapes, leurs blocages et leurs erreurs,
-puis de relancer un traitement suspendu. Une simulation automatisée de 30 cours
-d'une heure passe ; la veille réelle et les changements secteur/réseau seront
-validés sur le MacBook.
+État : le tableau de bord persiste et affiche l’enregistrement et la
+transcription locale, sans prétendre les planifier. Il n’existe pas encore de
+file FIFO, de checkpoints de pipeline, de backoff ni de reprise automatique.
 
 ## Phase 3 — Benchmark de transcription locale
 

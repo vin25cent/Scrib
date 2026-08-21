@@ -13,14 +13,11 @@ final class StoredProcessingJob {
     var courseDate: Date
     var createdAt: Date
     var updatedAt: Date
+    var activityRaw: String
     var statusRaw: String
-    var stageRaw: String?
-    var progress: Double
-    var attemptCount: Int
-    var nextAttemptAt: Date?
+    var reportedProgress: Double?
+    var suspensionReason: String?
     var lastError: String?
-    var suspensionReasonsData: Data
-    var checkpointsData: Data
 
     init(job: ProcessingJob) throws {
         id = job.id.rawValue
@@ -30,14 +27,11 @@ final class StoredProcessingJob {
         courseDate = job.courseDate
         createdAt = job.createdAt
         updatedAt = job.updatedAt
+        activityRaw = job.activity.rawValue
         statusRaw = job.status.rawValue
-        stageRaw = job.stage?.rawValue
-        progress = job.progress
-        attemptCount = job.attemptCount
-        nextAttemptAt = job.nextAttemptAt
+        reportedProgress = job.reportedProgress
+        suspensionReason = job.suspensionReason
         lastError = job.lastError
-        suspensionReasonsData = try JSONEncoder().encode(job.suspensionReasons)
-        checkpointsData = try JSONEncoder().encode(job.checkpoints)
     }
 
     func update(from job: ProcessingJob) throws {
@@ -47,22 +41,21 @@ final class StoredProcessingJob {
         courseDate = job.courseDate
         createdAt = job.createdAt
         updatedAt = job.updatedAt
+        activityRaw = job.activity.rawValue
         statusRaw = job.status.rawValue
-        stageRaw = job.stage?.rawValue
-        progress = job.progress
-        attemptCount = job.attemptCount
-        nextAttemptAt = job.nextAttemptAt
+        reportedProgress = job.reportedProgress
+        suspensionReason = job.suspensionReason
         lastError = job.lastError
-        suspensionReasonsData = try JSONEncoder().encode(job.suspensionReasons)
-        checkpointsData = try JSONEncoder().encode(job.checkpoints)
     }
 
     func domainValue() throws -> ProcessingJob {
-        guard let status = CourseStatus(rawValue: statusRaw) else {
+        guard let activity = ProcessingActivity(rawValue: activityRaw) else {
+            throw SwiftDataProcessingRepositoryError.invalidStoredActivity(activityRaw)
+        }
+        guard let status = ProcessingStatus(rawValue: statusRaw) else {
             throw SwiftDataProcessingRepositoryError.invalidStoredStatus(statusRaw)
         }
-        let stage = stageRaw.flatMap(ProcessingStage.init(rawValue:))
-        return try ProcessingJob(
+        return ProcessingJob(
             id: ProcessingJobID(rawValue: id),
             courseID: CourseID(rawValue: courseID),
             courseTitle: courseTitle,
@@ -70,25 +63,17 @@ final class StoredProcessingJob {
             courseDate: courseDate,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            activity: activity,
             status: status,
-            stage: stage,
-            progress: progress,
-            attemptCount: attemptCount,
-            nextAttemptAt: nextAttemptAt,
+            reportedProgress: reportedProgress,
+            suspensionReason: suspensionReason,
             lastError: lastError,
-            suspensionReasons: JSONDecoder().decode(
-                [ProcessingBlocker].self,
-                from: suspensionReasonsData
-            ),
-            checkpoints: JSONDecoder().decode(
-                [ProcessingCheckpoint].self,
-                from: checkpointsData
-            )
         )
     }
 }
 
 public enum SwiftDataProcessingRepositoryError: Error {
+    case invalidStoredActivity(String)
     case invalidStoredStatus(String)
 }
 
@@ -98,7 +83,10 @@ public actor SwiftDataProcessingJobRepository: ProcessingJobRepository {
     public init(inMemory: Bool = false) throws {
         let schema = Schema([StoredProcessingJob.self])
         let configuration = ModelConfiguration(
-            "ScribProcessingQueue",
+            // The former queue store described a pipeline that did not run.
+            // Keeping a distinct store prevents those stale claims from being
+            // presented as current activity.
+            "ScribProcessingTracking",
             schema: schema,
             isStoredInMemoryOnly: inMemory
         )

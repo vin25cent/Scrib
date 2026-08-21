@@ -3,7 +3,7 @@ import ScribInfrastructure
 
 @MainActor
 struct AppEnvironment {
-    let queueCoordinator: ProcessingQueueCoordinator
+    let processingTracker: ProcessingActivityTracker
     let supportImporter: any SupportDocumentImporting
     let aiSecretStore: any AISecretStoring
     let aiPreferencesStore: any AIGenerationPreferencesStoring
@@ -18,25 +18,13 @@ struct AppEnvironment {
             repository = try SwiftDataProcessingJobRepository()
         } catch {
             repository = InMemoryProcessingJobRepository()
-            warnings.append("La base persistante n’a pas pu être ouverte. La file sera temporaire : \(error.localizedDescription)")
+            warnings.append("La base persistante n’a pas pu être ouverte. Le suivi sera temporaire : \(error.localizedDescription)")
         }
 
         let supportImporter: any SupportDocumentImporting
-        do {
-            supportImporter = try LocalSupportDocumentStore()
-        } catch {
-            supportImporter = InMemorySupportDocumentStore()
-            warnings.append("Les supports importés ne seront pas conservés après fermeture : \(error.localizedDescription)")
-        }
+        supportImporter = LocalSupportDocumentStore()
 
-        let monitor = MacSystemConditionMonitor()
-        let notifications = MacProcessingNotificationSender()
-        let coordinator = ProcessingQueueCoordinator(
-            repository: repository,
-            conditions: monitor,
-            executor: DeferredPipelineExecutor(),
-            notifications: notifications
-        )
+        let tracker = ProcessingActivityTracker(repository: repository)
 
         let aiSecretStore: any AISecretStoring = MacKeychainSecretStore()
         let aiPreferencesStore = UserDefaultsAIGenerationPreferencesStore()
@@ -70,7 +58,7 @@ struct AppEnvironment {
         }
 
         return AppEnvironment(
-            queueCoordinator: coordinator,
+            processingTracker: tracker,
             supportImporter: supportImporter,
             aiSecretStore: aiSecretStore,
             aiPreferencesStore: aiPreferencesStore,

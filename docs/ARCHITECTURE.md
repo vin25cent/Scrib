@@ -6,8 +6,8 @@
    serveur local à installer sur le Mac cible.
 2. **Fiabilité avant débit** : audio segmenté, états persistants et opérations
    idempotentes.
-3. **Une seule charge lourde** : acteur d'orchestration séquentiel, profil de
-   ressources bas et préemption immédiate par l'enregistrement.
+3. **Vérité d’exécution** : le suivi persistant n’exécute rien ; chaque workflow
+   concret publie explicitement son propre état.
 4. **Local d'abord** : audio, transcription, métadonnées et journaux restent sur
    le Mac. Seuls les textes nécessaires partent vers le fournisseur choisi.
 5. **Sortie déterministe** : l'IA renvoie des données structurées ; Scrib rend le
@@ -20,17 +20,16 @@
 ```mermaid
 flowchart LR
     UI["SwiftUI + menu macOS"] --> APP["Cas d'usage"]
-    APP --> DOMAIN["Domaine et machine d'états"]
-    APP --> QUEUE["Coordinateur séquentiel"]
-    QUEUE --> AUDIO["AVFoundation"]
-    QUEUE --> ASR["Transcription locale interchangeable"]
-    QUEUE --> SUPPORTS["Extraction de supports"]
-    QUEUE --> CLOUD["IA cloud + sortie JSON"]
+    APP --> AUDIO["AVFoundation"]
+    APP --> ASR["Transcription locale interchangeable"]
+    APP --> SUPPORTS["Extraction de supports"]
+    APP --> CLOUD["IA cloud + sortie JSON"]
     CLOUD --> SOURCES["Recherche à domaines autorisés"]
-    QUEUE --> DOCX["Rendu OOXML local"]
-    QUEUE --> FILES["Stockage local + iCloud Drive"]
-    DOMAIN --> STORE["SwiftData local"]
-    QUEUE --> STORE
+    APP --> DOCX["Rendu OOXML local"]
+    APP --> FILES["Stockage local + iCloud Drive"]
+    AUDIO --> TRACKER["Suivi d’activité"]
+    ASR --> TRACKER
+    TRACKER --> STORE["SwiftData local"]
 ```
 
 ## 3. Modules
@@ -38,17 +37,18 @@ flowchart LR
 ### `ScribDomain`
 
 Types Swift purs et testables : identifiant du cours, métadonnées, segments,
-étapes, statuts, incidents, estimation de coûts et politique de traitement. Ce
+statuts d’activité, incidents, estimation de coûts et politique de traitement. Ce
 module ne connaît ni SwiftUI, ni AVFoundation, ni le réseau.
 
 ### `ScribApplication`
 
-Cas d'usage et ports : démarrer/arrêter l'enregistrement, clôturer un cours,
-planifier, reprendre, corriger la transcription, régénérer un document et décider
-du sort de l'audio. Ils couvrent aussi la confirmation d'autorisation par
-enseignant et la levée manuelle d'une alerte de données patient.
-`ProcessingCoordinator` sera un `actor` afin qu'une seule transition de la file
-soit active.
+Cas d'usage et ports : démarrer/arrêter l'enregistrement, lancer la transcription
+locale, corriger la transcription, régénérer un document et décider du sort de
+l'audio. Ils couvrent aussi la confirmation d'autorisation par enseignant et la
+levée manuelle d'une alerte de données patient.
+`ProcessingActivityTracker` est un `actor` de persistance : il reçoit les états
+émis par l’enregistrement et la transcription locale. Il ne planifie ni ne lance
+d’autres traitements.
 
 ### `ScribInfrastructure`
 
@@ -56,7 +56,6 @@ Adaptateurs concrets, ajoutés progressivement :
 
 - `AVFoundationAudioRecorder` ;
 - `SwiftDataCourseRepository` ;
-- `SystemConditionMonitor` (secteur, réseau, pression mémoire, état thermique) ;
 - `LocalTranscriptionAdapter` ;
 - `CloudGenerationAdapter` ;
 - `AllowlistedResearchAdapter` ;
@@ -68,41 +67,30 @@ Adaptateurs concrets, ajoutés progressivement :
 
 ### `ScribApp`
 
-Fenêtre SwiftUI, formulaire, enregistreur, file, éditeur de transcription,
+Fenêtre SwiftUI, formulaire, enregistreur, suivi d’activité, éditeur de transcription,
 réglages et `MenuBarExtra`. AppKit est réservé aux besoins propres à macOS : état
 des fenêtres, sélecteurs de fichiers, coordination de fichiers et intégration
 Word.
 
-## 4. Machine d'états persistante
+## 4. Suivi persistant des activités
 
 ```mermaid
 stateDiagram-v2
-    [*] --> draft
-    draft --> recording
-    recording --> captured
-    captured --> queued
-    queued --> preparing: secteur + Internet
-    preparing --> transcribing
-    transcribing --> analyzing
-    analyzing --> rendering
-    rendering --> publishing
-    publishing --> completed
-    preparing --> suspended
-    transcribing --> suspended
-    analyzing --> suspended
-    rendering --> suspended
-    publishing --> suspended
-    suspended --> queued: préconditions rétablies
-    transcribing --> needsAttention: erreur non récupérable
-    analyzing --> needsAttention: erreur non récupérable
-    rendering --> needsAttention: conflit Word
-    publishing --> needsAttention: conflit fichier
-    needsAttention --> queued: correction ou relance
+    [*] --> pending: activité demandée
+    pending --> processing: workflow réellement démarré
+    processing --> completed: workflow terminé
+    processing --> suspended: annulation ou arrêt de Scrib
+    processing --> failed: erreur du workflow
 ```
 
-Chaque transition écrit : statut, étape, progression, nombre de tentatives,
-entrée(s), sortie(s), date, version du moteur et empreinte du contenu. Une étape
-déjà terminée n'est rejouée que si une de ses entrées change.
+Les activités suivies aujourd’hui sont `recording` et `localTranscription`.
+La progression n’est stockée que lorsqu’un workflow réel la fournit ; elle vaut
+implicitement 100 % pour un état terminé. Une activité suspendue après fermeture
+reste suspendue : aucune reprise automatique n’est promise.
+
+Le magasin SwiftData de ce suivi porte un nouveau nom (`ScribProcessingTracking`).
+L’ancien magasin de file n’est pas relu : ses entrées décrivaient une exécution
+qui n’existait pas et ne doivent donc plus apparaître comme des travaux en attente.
 
 ## 5. Modèle de données minimal
 
@@ -110,7 +98,8 @@ déjà terminée n'est rejouée que si une de ses entrées change.
 - `Teacher` : identité normalisée, nom et date de confirmation de l'autorisation
   d'enregistrer.
 - `RecordingSegment` : URL locale, ordre, durée, empreinte, état de récupération.
-- `ProcessingJob` : étape, statut, progression, tentatives et prochaine reprise.
+- `ProcessingJob` : activité réelle, statut, progression éventuellement signalée,
+  motif de suspension ou erreur.
 - `Artifact` : type, URL, empreinte, version source et état iCloud.
 - `TranscriptRevision` : texte horodaté, locuteurs, incertitudes et version.
 - `SupportDocument` : type, URL, extraction structurée persistée et éléments
@@ -194,9 +183,9 @@ Le benchmark compare Small, Medium quantifié et Large-v3-Turbo quantifié avec 
 - température, stabilité et temps par heure d'audio ;
 - taille de modèle sur disque.
 
-Contraintes fixes : lot de taille 1, traitement séquentiel, libération du modèle
-après l'étape, suspension aux états thermiques sérieux/critiques et possibilité de
-reprendre par blocs.
+Contraintes actuellement appliquées : lot de taille 1, traitement séquentiel et
+libération du modèle après la transcription. La suspension thermique et la reprise
+par blocs restent des évolutions à relier à un futur orchestrateur réel.
 
 La diarisation est une étape séparée et optionnelle : une mauvaise attribution de
 locuteur ne doit jamais modifier les mots reconnus.
@@ -273,15 +262,13 @@ supports.
 
 ## 11. Ressources et exécution macOS
 
-- `ProcessInfo.thermalState` et ses notifications pilotent la suspension thermique.
-- La pression mémoire déclenche la libération des caches et la suspension de
-  l'étape lourde au prochain checkpoint sûr.
 - Une activité système est ouverte uniquement pendant l'enregistrement et, si
   nécessaire, pendant la transcription locale.
-- La présence du secteur est une précondition du coordinateur.
 - L'absence de fenêtre n'arrête pas le processus ; quitter explicitement
   l'application demande confirmation si une opération est active.
-- La file demeure volontairement séquentielle sur 8 Go.
+- Les mesures de température, mémoire, secteur et réseau servent aujourd’hui au
+  diagnostic et aux benchmarks. Elles ne suspendent ni ne relancent un workflow
+  via le suivi persistant.
 
 ## 12. Sécurité
 
