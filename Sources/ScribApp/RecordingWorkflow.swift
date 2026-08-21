@@ -253,6 +253,29 @@ final class RecordingWorkflow: ObservableObject {
             incidentMessage: existingAudioIssues.first?.localizedDescription)
     }
 
+    func recordingSession(for courseID: CourseID) throws -> RecoveredRecordingSession? {
+        try recordingSessionStore?.recordingSession(for: courseID)
+    }
+
+    func activate(_ workspace: ActiveCourseWorkspace) {
+        currentCourse = workspace.course
+        capturedSegments = workspace.recordingSegments
+        existingAudioIssues = workspace.recordingIssues
+        if existingAudioIssues.isEmpty {
+            existingAudioIssues = capturedSegments.compactMap { segment in
+                FileManager.default.fileExists(atPath: segment.fileURL.path)
+                    ? nil
+                    : .missingAudioFile(relativePath: segment.fileURL.lastPathComponent)
+            }
+        }
+        snapshot = AudioRecorderSnapshot(
+            state: .finished,
+            elapsed: capturedSegments.reduce(0) { $0 + $1.duration },
+            segments: capturedSegments,
+            incidentMessage: existingAudioIssues.first?.localizedDescription
+        )
+    }
+
     private func launchRecordingStart(with teacher: Teacher) {
         guard let startID = recordingStartGate.beginStart() else { return }
         syncRecordingWorkflowState()

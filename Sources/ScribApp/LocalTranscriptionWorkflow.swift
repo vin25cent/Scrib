@@ -103,6 +103,31 @@ final class LocalTranscriptionWorkflow: ObservableObject {
         }
     }
 
+    func storedTranscription(for courseID: CourseID) async throws -> StoredLocalTranscription? {
+        try await coordinator.transcription(for: courseID)
+    }
+
+    func activate(_ stored: StoredLocalTranscription?) {
+        progress = .init(stage: .idle)
+        pendingReplacement = nil
+        guard let stored else {
+            lastResult = nil
+            lastTransformations = []
+            realDraft = nil
+            transcriptDraft = nil
+            transcriptSearch = ""
+            transcriptFilter = .all
+            return
+        }
+        lastResult = stored.result
+        lastTransformations = stored.transformations ?? []
+        let userFacingDraft = WhisperTranscriptTextNormalizer.normalize(stored.draft)
+        realDraft = userFacingDraft
+        transcriptDraft = userFacingDraft
+        transcriptSearch = ""
+        transcriptFilter = .all
+    }
+
     func transcriptTextBinding(for passageID: UUID) -> Binding<String> {
         Binding(
             get: { [weak self] in

@@ -15,6 +15,9 @@ struct LocalTranscriptionView: View {
                     subtitle: "Small est la baseline recommandée. Medium reste un candidat qualité à confirmer par benchmark sur votre Mac.",
                     icon: "waveform.badge.magnifyingglass"
                 )
+                if model.activeCourseID != nil {
+                    ActiveTranscriptionCourseCard(model: model)
+                }
                 LocalTranscriptionEngineCard()
                 LocalTranscriptionModelCard(model: model)
                 LocalTranscriptionAudioCard(model: model)
@@ -34,6 +37,47 @@ struct LocalTranscriptionView: View {
         .navigationTitle("Transcription locale")
         .overlay(alignment: .bottomTrailing) { WorkspaceNotice(model: model) }
         .task { await model.refreshLocalModelStatus() }
+    }
+}
+
+private struct ActiveTranscriptionCourseCard: View {
+    @ObservedObject var model: RecordingViewModel
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "book.closed.fill")
+                .font(.title2)
+                .foregroundStyle(ScribDesign.accent)
+                .frame(width: 48, height: 48)
+                .background(ScribDesign.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 13))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(model.activeCourseTitle ?? "Cours sélectionné")
+                    .font(.headline)
+                if let unit = model.activeCourseTeachingUnit, !unit.isEmpty {
+                    Text(unit).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 12) {
+                    if let teacher = model.activeCourseTeacherName, !teacher.isEmpty {
+                        Label(teacher, systemImage: "person.fill")
+                    }
+                    if let date = model.activeCourseDate {
+                        Label(date.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if model.isLoadingActiveCourse {
+                ProgressView().controlSize(.small)
+                Text("Chargement…").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Label("Cours actif", systemImage: "checkmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(ScribDesign.success)
+            }
+        }
+        .scribCard()
     }
 }
 
@@ -262,9 +306,11 @@ private struct LocalTranscriptionAudioCard: View {
     @ViewBuilder
     private var availabilityHint: some View {
         if model.capturedSegments.isEmpty {
-            Text(model.lastLocalTranscriptionResult == nil
-                ? "Enregistrez puis arrêtez un cours pour activer la transcription."
-                : "Aucun enregistrement existant n’est disponible pour ce cours.")
+            Text(model.activeCourseCameFromTracking
+                ? "Aucun enregistrement n’est disponible pour ce cours."
+                : (model.lastLocalTranscriptionResult == nil
+                    ? "Enregistrez puis arrêtez un cours pour activer la transcription."
+                    : "Aucun enregistrement existant n’est disponible pour ce cours."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else if let issue = model.existingAudioIssues.first {

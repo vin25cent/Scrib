@@ -470,14 +470,14 @@ private struct ProcessingTrackingView: View {
             }
         }
         .background(ScribDesign.canvas)
-        .navigationTitle("Suivi d’activité")
+        .navigationTitle("Suivi des cours")
     }
 
     private var dashboardHeader: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Suivi d’activité")
+                    Text("Suivi des cours")
                         .font(.title2.weight(.semibold))
                     Text("Ce suivi reflète les activités réellement exécutées ; il ne lance aucun traitement.")
                         .font(.subheadline)
@@ -559,7 +559,10 @@ private struct ProcessingTrackingView: View {
     @ViewBuilder
     private var courseDetail: some View {
         if let job = model.selectedProcessingJob {
-            CourseTrackingDetail(job: job, refresh: { Task { await model.reloadProcessingTracking() } })
+            CourseTrackingDetail(
+                job: job,
+                refresh: { Task { await model.reloadProcessingTracking() } },
+                openInTranscription: model.openSelectedCourseInLocalTranscription)
         } else {
             PlaceholderView(
                 title: "Sélectionnez un cours",
@@ -633,6 +636,7 @@ private struct CourseTrackingRow: View {
 private struct CourseTrackingDetail: View {
     let job: ProcessingJob
     let refresh: () -> Void
+    let openInTranscription: () -> Void
 
     var body: some View {
         ScrollView {
@@ -661,7 +665,11 @@ private struct CourseTrackingDetail: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                statusBadge
+                VStack(alignment: .trailing, spacing: 10) {
+                    statusBadge
+                    Button("Ouvrir dans Transcription locale", action: openInTranscription)
+                        .buttonStyle(.borderedProminent)
+                }
             }
             HStack(spacing: 18) {
                 Label(job.courseDate.formatted(date: .long, time: .omitted), systemImage: "calendar")

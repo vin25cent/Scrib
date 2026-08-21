@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
         case newCourse = "Nouveau cours"
         case segments = "Segments"
         case localTranscription = "Transcription locale"
-        case queue = "Suivi d’activité"
+        case queue = "Suivi des cours"
         case transcript = "Transcription"
         case supports = "Documents enseignant"
         case privacy = "Confidentialité"
@@ -35,6 +35,8 @@ import UniformTypeIdentifiers
     @Published var workspaceNotice: String?
     @Published var errorMessage: String?
     @Published var quitWarningRequested = false
+    @Published private(set) var activeCourseSelection = ActiveCourseSelection()
+    @Published private(set) var isLoadingActiveCourse = false
     @Published private(set) var supportDocuments: [SupportDocument] = []
     @Published private(set) var isImportingSupportDocument = false
     @Published private(set) var isDeletingSupportDocument = false
@@ -52,6 +54,8 @@ import UniformTypeIdentifiers
     private let privacyGate = CloudPrivacyGate()
     private var aiKeyStatusTask: Task<Void, Never>?
     private var aiKeyStatusGeneration = LatestOperationGeneration()
+    private var activeCourseLoadGeneration = LatestOperationGeneration()
+    private var activeCourseLoadTask: Task<Void, Never>?
     private var workflowObservers = Set<AnyCancellable>()
 
     init(
@@ -76,15 +80,26 @@ import UniformTypeIdentifiers
     private func bindWorkflows() {
         recording.reportError = { [weak self] in self?.errorMessage = $0 }
         recording.reportNotice = { [weak self] in self?.workspaceNotice = $0 }
-        recording.didBeginNewRecording = { [weak self] in self?.transcription.resetForNewRecording()
+        recording.didBeginNewRecording = { [weak self] in
+            guard let self else { return }
+            cancelActiveCourseLoad()
+            if let course = self.recording.currentCourse { activeCourseSelection.select(course) }
+            transcription.resetForNewRecording()
         }
-        recording.didFinishRecording = { [weak self] in self?.selectedSection = .localTranscription
+        recording.didFinishRecording = { [weak self] in
+            guard let self else { return }
+            if let course = self.recording.currentCourse { activeCourseSelection.select(course) }
+            selectedSection = .localTranscription
         }
-        recording.didRecoverRecording = { [weak self] in self?.selectedSection = .segments }
+        recording.didRecoverRecording = { [weak self] in
+            guard let self else { return }
+            if let course = self.recording.currentCourse { activeCourseSelection.select(course) }
+            selectedSection = .segments
+        }
         transcription.reportError = { [weak self] in self?.errorMessage = $0 }
         transcription.reportNotice = { [weak self] in self?.workspaceNotice = $0 }
         transcription.trackingDidChange = { [weak self] in
-            await self?.recording.reloadProcessingTracking()
+            await self?.reloadProcessingTracking()
         }
         recording.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(
             in: &workflowObservers)
@@ -99,6 +114,7 @@ import UniformTypeIdentifiers
             await refreshSupportDocuments()
             await transcription.refreshModelStatus()
             if let stored = await transcription.restoreLatest() {
+                activeCourseSelection.select(stored.course)
                 recording.restoreTranscriptionAudio(stored)
             }
             recording.restoreRecoverableRecordingSession()
@@ -128,19 +144,33 @@ import UniformTypeIdentifiers
     }
     var savedTeachers: [Teacher] { recording.savedTeachers }
     var snapshot: AudioRecorderSnapshot { recording.snapshot }
-    var currentCourse: Course? { recording.currentCourse }
-    var capturedSegments: [RecordingSegment] { recording.capturedSegments }
-    var existingAudioIssues: [RecordingSessionRecoveryIssue] { recording.existingAudioIssues }
+    var activeCourseID: CourseID? { activeCourseSelection.courseID }
+    var activeCourseCameFromTracking: Bool { activeCourseSelection.trackingJobID != nil }
+    var currentCourse: Course? {
+        guard recording.currentCourse?.id == activeCourseID else { return nil }
+        return recording.currentCourse
+    }
+    var capturedSegments: [RecordingSegment] {
+        recording.currentCourse?.id == activeCourseID ? recording.capturedSegments : []
+    }
+    var existingAudioIssues: [RecordingSessionRecoveryIssue] {
+        recording.currentCourse?.id == activeCourseID ? recording.existingAudioIssues : []
+    }
     var lastAvailableCapacity: Int64? { recording.lastAvailableCapacity }
     var lowSoundWarning: Bool { recording.lowSoundWarning }
     var processingJobs: [ProcessingJob] { recording.processingJobs }
     var trackingFilter: CourseTrackingFilter {
         get { recording.trackingFilter }
-        set { recording.trackingFilter = newValue }
+        set {
+            recording.trackingFilter = newValue
+            if let job = recording.selectedProcessingJob {
+                activateTrackedCourse(job, navigateToTranscription: false)
+            }
+        }
     }
     var selectedProcessingJobID: ProcessingJobID? {
         get { recording.selectedProcessingJobID }
-        set { recording.selectedProcessingJobID = newValue }
+        set { selectProcessingJob(newValue) }
     }
     var authorizationRequested: Bool {
         get { recording.authorizationRequested }
@@ -165,12 +195,31 @@ import UniformTypeIdentifiers
     func pause() { recording.pause() }
     func resume() { recording.resume() }
     func stop() { recording.stop() }
-    func prepareProcessingTracking() async { await recording.prepareProcessingTracking() }
-    func reloadProcessingTracking() async { await recording.reloadProcessingTracking() }
-    func selectProcessingJob(_ id: ProcessingJobID?) { recording.selectProcessingJob(id) }
+    func prepareProcessingTracking() async {
+        await recording.prepareProcessingTracking()
+        alignTrackingSelectionWithActiveCourse()
+    }
+    func reloadProcessingTracking() async {
+        await recording.reloadProcessingTracking()
+        alignTrackingSelectionWithActiveCourse()
+    }
+    func selectProcessingJob(_ id: ProcessingJobID?) {
+        guard let id, let job = processingJobs.first(where: { $0.id == id }) else {
+            recording.selectProcessingJob(nil)
+            return
+        }
+        activateTrackedCourse(job, navigateToTranscription: false)
+    }
+    func openSelectedCourseInLocalTranscription() {
+        guard let job = selectedProcessingJob else { return }
+        activateTrackedCourse(job, navigateToTranscription: true)
+    }
     func finalizeForTermination() throws { try recording.finalizeForTermination() }
 
-    var transcriptDraft: TranscriptDraft? { transcription.transcriptDraft }
+    var transcriptDraft: TranscriptDraft? {
+        guard transcription.transcriptDraft?.courseID == activeCourseID else { return nil }
+        return transcription.transcriptDraft
+    }
     var transcriptSearch: String {
         get { transcription.transcriptSearch }
         set { transcription.transcriptSearch = newValue }
@@ -182,7 +231,10 @@ import UniformTypeIdentifiers
     var selectedLocalTranscriptionModel: LocalTranscriptionModelID { transcription.selectedModel }
     var localModelStatus: TranscriptionModelStatus { transcription.modelStatus }
     var localTranscriptionProgress: LocalTranscriptionProgress { transcription.progress }
-    var lastLocalTranscriptionResult: LocalTranscriptionResult? { transcription.lastResult }
+    var lastLocalTranscriptionResult: LocalTranscriptionResult? {
+        guard transcription.lastResult?.courseID == activeCourseID else { return nil }
+        return transcription.lastResult
+    }
     var isDownloadingTranscriptionModel: Bool { transcription.isDownloadingModel }
     var isLocalTranscriptionRunning: Bool { transcription.isRunning }
     var isRetranscribingAudio: Bool { transcription.isRetranscribing }
@@ -202,7 +254,22 @@ import UniformTypeIdentifiers
     var canRetranscribeAudio: Bool {
         lastLocalTranscriptionResult != nil && canStartLocalTranscription
     }
-    var filteredTranscriptPassages: [TranscriptPassage] { transcription.filteredPassages }
+    var filteredTranscriptPassages: [TranscriptPassage] {
+        transcriptDraft == nil ? [] : transcription.filteredPassages
+    }
+    var activeCourseTitle: String? {
+        currentCourse?.title
+            ?? processingJobs.first(where: { $0.courseID == activeCourseID })?.courseTitle
+    }
+    var activeCourseTeachingUnit: String? {
+        currentCourse?.teachingUnit.displayName
+            ?? processingJobs.first(where: { $0.courseID == activeCourseID })?.teachingUnit
+    }
+    var activeCourseTeacherName: String? { currentCourse?.teacherName }
+    var activeCourseDate: Date? {
+        currentCourse?.courseDate
+            ?? processingJobs.first(where: { $0.courseID == activeCourseID })?.courseDate
+    }
     func transcriptTextBinding(for passageID: UUID) -> Binding<String> {
         transcription.transcriptTextBinding(for: passageID)
     }
@@ -244,6 +311,90 @@ import UniformTypeIdentifiers
     func cancelLocalTranscription() { transcription.cancel(courseID: currentCourse?.id) }
     func openRawTranscriptInEditor() {
         if transcription.openRawTranscript() { selectedSection = .transcript }
+    }
+
+    private func activateTrackedCourse(
+        _ job: ProcessingJob, navigateToTranscription: Bool
+    ) {
+        if activeCourseID == job.courseID,
+           (hasActiveSession || isLocalTranscriptionRunning || hasPendingTranscriptionReplacement) {
+            recording.selectProcessingJob(job.id)
+            activeCourseSelection.select(job)
+            if navigateToTranscription { selectedSection = .localTranscription }
+            return
+        }
+        let changingCourse = activeCourseID != job.courseID
+        if changingCourse && (hasActiveSession || isLocalTranscriptionRunning
+            || hasPendingTranscriptionReplacement) {
+            alignTrackingSelectionWithActiveCourse()
+            errorMessage = hasPendingTranscriptionReplacement
+                ? "Choisissez d’abord quelle transcription conserver avant de changer de cours."
+                : "Terminez ou annulez le traitement en cours avant de changer de cours."
+            return
+        }
+
+        recording.selectProcessingJob(job.id)
+        activeCourseSelection.select(job)
+        privacyReview = nil
+        isLoadingActiveCourse = true
+        activeCourseLoadTask?.cancel()
+        let operationID = activeCourseLoadGeneration.begin()
+        let session: RecoveredRecordingSession?
+        do {
+            session = try recording.recordingSession(for: job.courseID)
+        } catch {
+            _ = activeCourseLoadGeneration.finish(operationID)
+            isLoadingActiveCourse = false
+            errorMessage = "Les enregistrements de ce cours n’ont pas pu être chargés : \(error.localizedDescription)"
+            return
+        }
+
+        activeCourseLoadTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if activeCourseLoadGeneration.finish(operationID) {
+                    isLoadingActiveCourse = false
+                    activeCourseLoadTask = nil
+                }
+            }
+            do {
+                let stored = try await transcription.storedTranscription(for: job.courseID)
+                try Task.checkCancellation()
+                guard activeCourseLoadGeneration.accepts(operationID),
+                      activeCourseID == job.courseID else { return }
+                let workspace = try ActiveCourseWorkspace(
+                    courseID: job.courseID,
+                    recordingSession: session,
+                    transcription: stored)
+                recording.activate(workspace)
+                transcription.activate(workspace.transcription)
+                if navigateToTranscription { selectedSection = .localTranscription }
+                workspaceNotice = !capturedSegments.isEmpty && existingAudioIssues.isEmpty
+                    ? "\(job.courseTitle) est maintenant le cours actif."
+                    : "\(job.courseTitle) est actif, mais aucun enregistrement exploitable n’est disponible."
+            } catch is CancellationError {
+                return
+            } catch {
+                guard activeCourseLoadGeneration.accepts(operationID) else { return }
+                errorMessage = "Le cours sélectionné n’a pas pu être ouvert : \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func alignTrackingSelectionWithActiveCourse() {
+        guard let activeCourseID,
+              let job = processingJobs.first(where: { $0.courseID == activeCourseID }) else {
+            return
+        }
+        recording.selectProcessingJob(job.id)
+        activeCourseSelection.select(job)
+    }
+
+    private func cancelActiveCourseLoad() {
+        activeCourseLoadTask?.cancel()
+        activeCourseLoadTask = nil
+        _ = activeCourseLoadGeneration.cancelCurrent()
+        isLoadingActiveCourse = false
     }
 
     private var privacyContent: String {
