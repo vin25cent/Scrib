@@ -140,59 +140,64 @@ public actor LocalTranscriptionCoordinator {
             modelID: modelID,
             languageCode: "fr"
         )
-        defer { Task { await engine.unload() } }
-        var result = try await engine.transcribe(request, progress: progress)
-        try Task.checkCancellation()
-        progress(.init(
-            stage: .assembling,
-            fractionCompleted: 0.96,
-            completedSegmentCount: orderedSegments.count,
-            totalSegmentCount: orderedSegments.count,
-            elapsedSeconds: result.metrics.processingDurationSeconds
-        ))
-        result.passages = deduplicator.deduplicating(result.passages)
+        do {
+            var result = try await engine.transcribe(request, progress: progress)
+            try Task.checkCancellation()
+            progress(.init(
+                stage: .assembling,
+                fractionCompleted: 0.96,
+                completedSegmentCount: orderedSegments.count,
+                totalSegmentCount: orderedSegments.count,
+                elapsedSeconds: result.metrics.processingDurationSeconds
+            ))
+            result.passages = deduplicator.deduplicating(result.passages)
 
-        let draft = TranscriptDraft(
-            courseID: course.id,
-            courseTitle: course.title,
-            teachingUnit: course.teachingUnit.displayName,
-            passages: result.passages.map {
-                TranscriptPassage(
-                    id: $0.id,
-                    speaker: "Voix non attribuée",
-                    startTime: $0.startTime,
-                    endTime: $0.endTime,
-                    text: $0.text,
-                    sourceRecordingSegmentID: $0.sourceSegmentID,
-                    confidence: $0.confidence
-                )
-            },
-            transcriptionEngine: result.engine,
-            transcriptionModelID: result.modelID,
-            rawTranscriptionCompletedAt: result.completedAt
-        )
-        let stored = StoredLocalTranscription(
-            course: course,
-            recordingSegments: orderedSegments,
-            result: result,
-            draft: draft
-        )
-        progress(.init(
-            stage: .saving,
-            fractionCompleted: 0.99,
-            completedSegmentCount: orderedSegments.count,
-            totalSegmentCount: orderedSegments.count,
-            elapsedSeconds: result.metrics.processingDurationSeconds
-        ))
-        try await store.save(stored)
-        progress(.init(
-            stage: .completed,
-            fractionCompleted: 1,
-            completedSegmentCount: orderedSegments.count,
-            totalSegmentCount: orderedSegments.count,
-            elapsedSeconds: result.metrics.processingDurationSeconds
-        ))
-        return stored
+            let draft = TranscriptDraft(
+                courseID: course.id,
+                courseTitle: course.title,
+                teachingUnit: course.teachingUnit.displayName,
+                passages: result.passages.map {
+                    TranscriptPassage(
+                        id: $0.id,
+                        speaker: "Voix non attribuée",
+                        startTime: $0.startTime,
+                        endTime: $0.endTime,
+                        text: $0.text,
+                        sourceRecordingSegmentID: $0.sourceSegmentID,
+                        confidence: $0.confidence
+                    )
+                },
+                transcriptionEngine: result.engine,
+                transcriptionModelID: result.modelID,
+                rawTranscriptionCompletedAt: result.completedAt
+            )
+            let stored = StoredLocalTranscription(
+                course: course,
+                recordingSegments: orderedSegments,
+                result: result,
+                draft: draft
+            )
+            progress(.init(
+                stage: .saving,
+                fractionCompleted: 0.99,
+                completedSegmentCount: orderedSegments.count,
+                totalSegmentCount: orderedSegments.count,
+                elapsedSeconds: result.metrics.processingDurationSeconds
+            ))
+            try await store.save(stored)
+            progress(.init(
+                stage: .completed,
+                fractionCompleted: 1,
+                completedSegmentCount: orderedSegments.count,
+                totalSegmentCount: orderedSegments.count,
+                elapsedSeconds: result.metrics.processingDurationSeconds
+            ))
+            await engine.unload()
+            return stored
+        } catch {
+            await engine.unload()
+            throw error
+        }
     }
 
     public func saveEditedDraft(_ draft: TranscriptDraft) async throws {

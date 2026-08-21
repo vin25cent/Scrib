@@ -84,6 +84,7 @@ final class RecordingViewModel: ObservableObject {
     @Published var authorizationRequested = false
     @Published var errorMessage: String?
     @Published var quitWarningRequested = false
+    @Published private(set) var recordingWorkflowState: RecordingWorkflowState = .idle
 
     private let recorder: any AudioRecording
     private let fileStore: any CourseFileStoring
@@ -93,6 +94,7 @@ final class RecordingViewModel: ObservableObject {
     private let aiSecretStore: any AISecretStoring
     private let aiPreferencesStore: any AIGenerationPreferencesStoring
     private let transcriptionCoordinator: LocalTranscriptionCoordinator
+    private let recordingSessionStore: (any RecordingSessionStoring)?
     private let readinessValidator = RecordingReadinessValidator()
     private let trackingPresenter = CourseTrackingPresenter()
     private let transcriptService = TranscriptWorkspaceService()
@@ -101,11 +103,29 @@ final class RecordingViewModel: ObservableObject {
     private var pendingTeacher: Teacher?
     private var pollingTask: Task<Void, Never>?
     private var queuePollingTask: Task<Void, Never>?
+    private var startupTask: Task<Void, Never>?
+    private var recordingStartTask: Task<Void, Never>?
+    private var recordingStartTaskID: UUID?
+    private var recordingCompletionTask: Task<Void, Never>?
+    private var recordingCompletionID: UUID?
     private var lowSoundStartedAt: Date?
     private var systemActivity: NSObjectProtocol?
     private var modelDownloadTask: Task<Void, Never>?
     private var localTranscriptionTask: Task<Void, Never>?
+    private var retiringModelDownloadTask: (id: UUID, task: Task<Void, Never>)?
+    private var retiringLocalTranscriptionTask: (id: UUID, task: Task<Void, Never>)?
+    private var transcriptSaveTask: Task<Void, Never>?
+    private var aiKeyStatusTask: Task<Void, Never>?
+    private var modelStatusTask: Task<Void, Never>?
     private var realTranscriptDraft: TranscriptDraft?
+    private var recordingStartGate = RecordingStartGate()
+    private var transcriptionGeneration = LatestOperationGeneration()
+    private var modelDownloadGeneration = LatestOperationGeneration()
+    private var modelStatusGeneration = LatestOperationGeneration()
+    private var transcriptSaveGeneration = LatestOperationGeneration()
+    private var aiKeyStatusGeneration = LatestOperationGeneration()
+    private var transcriptionProgressGate = OrderedProgressGate()
+    private var modelDownloadProgressGate = OrderedProgressGate()
 
     init(
         recorder: any AudioRecording,
@@ -116,6 +136,7 @@ final class RecordingViewModel: ObservableObject {
         aiSecretStore: any AISecretStoring,
         aiPreferencesStore: any AIGenerationPreferencesStoring,
         transcriptionCoordinator: LocalTranscriptionCoordinator,
+        recordingSessionStore: (any RecordingSessionStoring)? = nil,
         startupWarning: String? = nil
     ) {
         self.recorder = recorder
@@ -126,6 +147,7 @@ final class RecordingViewModel: ObservableObject {
         self.aiSecretStore = aiSecretStore
         self.aiPreferencesStore = aiPreferencesStore
         self.transcriptionCoordinator = transcriptionCoordinator
+        self.recordingSessionStore = recordingSessionStore
         var loadedAIPreferences = aiPreferencesStore.load()
         if AIModelCatalog.profile(id: loadedAIPreferences.selectedModelProfileID) == nil {
             loadedAIPreferences.selectedModelProfileID = AIModelCatalog.profiles[0].id
@@ -134,10 +156,13 @@ final class RecordingViewModel: ObservableObject {
         self.savedTeachers = teacherStore.teachers()
         self.supportDocuments = supportImporter.documents()
         self.errorMessage = startupWarning
-        Task { await refreshAIKeyStatus() }
-        Task {
+        startupTask = Task { [weak self] in
+            guard let self else { return }
+            await refreshAIKeyStatus()
             await refreshLocalModelStatus()
             await restoreLatestLocalTranscription()
+            restoreRecoverableRecordingSession()
+            startupTask = nil
         }
     }
 
@@ -147,7 +172,9 @@ final class RecordingViewModel: ObservableObject {
 
     var isRecording: Bool { snapshot.state == .recording }
     var isPaused: Bool { snapshot.state == .paused }
-    var hasActiveSession: Bool { isRecording || isPaused }
+    var isStartingRecording: Bool { recordingWorkflowState == .starting }
+    var isStoppingRecording: Bool { recordingWorkflowState == .stopping }
+    var hasActiveSession: Bool { isRecording || isPaused || isStartingRecording || isStoppingRecording }
 
     var canStart: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -299,10 +326,25 @@ final class RecordingViewModel: ObservableObject {
 
     private func persistRealTranscriptIfNeeded(_ draft: TranscriptDraft) {
         realTranscriptDraft = draft
-        Task {
+        let predecessor = transcriptSaveTask
+        predecessor?.cancel()
+        let operationID = transcriptSaveGeneration.begin()
+        transcriptSaveTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if transcriptSaveGeneration.finish(operationID) {
+                    transcriptSaveTask = nil
+                }
+            }
             do {
+                if let predecessor {
+                    await predecessor.value
+                }
+                try Task.checkCancellation()
+                guard transcriptSaveGeneration.accepts(operationID) else { return }
                 try await transcriptionCoordinator.saveEditedDraft(draft)
             } catch {
+                guard transcriptSaveGeneration.accepts(operationID), !Task.isCancelled else { return }
                 errorMessage = "La modification n’a pas pu être enregistrée : \(error.localizedDescription)"
             }
         }
@@ -310,34 +352,83 @@ final class RecordingViewModel: ObservableObject {
 
     func selectLocalTranscriptionModel(_ modelID: LocalTranscriptionModelID) {
         guard LocalTranscriptionModelCatalog.descriptor(for: modelID)?.isEnabledInAlpha == true else { return }
+        cancelModelDownload()
         selectedLocalTranscriptionModel = modelID
         localModelStatus = .init(modelID: modelID, availability: .notDownloaded)
-        Task { await refreshLocalModelStatus() }
+        scheduleModelStatusRefresh()
     }
 
     func refreshLocalModelStatus() async {
-        localModelStatus = await transcriptionCoordinator.modelStatus(for: selectedLocalTranscriptionModel)
+        let modelID = selectedLocalTranscriptionModel
+        let operationID = modelStatusGeneration.begin()
+        let status = await transcriptionCoordinator.modelStatus(for: modelID)
+        guard modelStatusGeneration.finish(operationID),
+              selectedLocalTranscriptionModel == modelID,
+              !isDownloadingTranscriptionModel else { return }
+        localModelStatus = status
+    }
+
+    private func scheduleModelStatusRefresh() {
+        modelStatusTask?.cancel()
+        modelStatusTask = Task { [weak self] in
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            await refreshLocalModelStatus()
+        }
     }
 
     func downloadSelectedTranscriptionModel() {
         guard !isDownloadingTranscriptionModel else { return }
+        _ = modelStatusGeneration.cancelCurrent()
         isDownloadingTranscriptionModel = true
         let modelID = selectedLocalTranscriptionModel
+        let operationID = modelDownloadGeneration.begin()
+        let progressSequence = WorkflowProgressSequence()
+        let predecessor = retiringModelDownloadTask
+        modelDownloadProgressGate.begin(operationID: operationID)
         modelDownloadTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if retiringModelDownloadTask?.id == operationID {
+                    retiringModelDownloadTask = nil
+                }
+                if modelDownloadGeneration.finish(operationID) {
+                    modelDownloadProgressGate.invalidate(operationID: operationID)
+                    isDownloadingTranscriptionModel = false
+                    modelDownloadTask = nil
+                }
+            }
             do {
-                let status = try await transcriptionCoordinator.downloadModel(modelID) { [weak self] status in
-                    Task { @MainActor [weak self] in
-                        guard self?.selectedLocalTranscriptionModel == status.modelID else { return }
-                        self?.localModelStatus = status
+                if let predecessor {
+                    await predecessor.task.value
+                    if retiringModelDownloadTask?.id == predecessor.id {
+                        retiringModelDownloadTask = nil
                     }
                 }
-                guard !Task.isCancelled else { return }
+                try Task.checkCancellation()
+                guard modelDownloadGeneration.accepts(operationID) else { return }
+                let status = try await transcriptionCoordinator.downloadModel(modelID) { [weak self] status in
+                    let sequence = progressSequence.next()
+                    Task { @MainActor [weak self] in
+                        self?.applyModelDownloadProgress(
+                            status,
+                            operationID: operationID,
+                            sequence: sequence
+                        )
+                    }
+                }
+                guard modelDownloadGeneration.accepts(operationID), !Task.isCancelled else { return }
                 localModelStatus = status
                 workspaceNotice = "Le modèle \(selectedLocalTranscriptionModelDescriptor.displayName) est disponible hors ligne."
             } catch is CancellationError {
-                await refreshLocalModelStatus()
+                guard modelDownloadGeneration.accepts(operationID) else { return }
+                let status = await transcriptionCoordinator.modelStatus(for: modelID)
+                guard modelDownloadGeneration.accepts(operationID),
+                      selectedLocalTranscriptionModel == modelID,
+                      !Task.isCancelled else { return }
+                localModelStatus = status
             } catch {
+                guard modelDownloadGeneration.accepts(operationID), !Task.isCancelled else { return }
                 localModelStatus = .init(
                     modelID: modelID,
                     availability: .failed,
@@ -345,13 +436,18 @@ final class RecordingViewModel: ObservableObject {
                 )
                 errorMessage = error.localizedDescription
             }
-            isDownloadingTranscriptionModel = false
-            modelDownloadTask = nil
         }
     }
 
     func cancelModelDownload() {
-        modelDownloadTask?.cancel()
+        if let modelDownloadTask, let operationID = modelDownloadGeneration.currentID {
+            modelDownloadTask.cancel()
+            retiringModelDownloadTask = (operationID, modelDownloadTask)
+        }
+        if let operationID = modelDownloadGeneration.currentID {
+            modelDownloadProgressGate.invalidate(operationID: operationID)
+        }
+        _ = modelDownloadGeneration.cancelCurrent()
         modelDownloadTask = nil
         isDownloadingTranscriptionModel = false
     }
@@ -360,6 +456,10 @@ final class RecordingViewModel: ObservableObject {
         guard let course = currentCourse, canStartLocalTranscription else { return }
         let segments = capturedSegments
         let modelID = selectedLocalTranscriptionModel
+        let operationID = transcriptionGeneration.begin()
+        let progressSequence = WorkflowProgressSequence()
+        let predecessor = retiringLocalTranscriptionTask
+        transcriptionProgressGate.begin(operationID: operationID)
         isLocalTranscriptionRunning = true
         localTranscriptionProgress = .init(
             stage: .checkingModel,
@@ -368,36 +468,98 @@ final class RecordingViewModel: ObservableObject {
         )
         localTranscriptionTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if retiringLocalTranscriptionTask?.id == operationID {
+                    retiringLocalTranscriptionTask = nil
+                }
+                if transcriptionGeneration.finish(operationID) {
+                    transcriptionProgressGate.invalidate(operationID: operationID)
+                    isLocalTranscriptionRunning = false
+                    localTranscriptionTask = nil
+                }
+            }
             do {
+                if let predecessor {
+                    await predecessor.task.value
+                    if retiringLocalTranscriptionTask?.id == predecessor.id {
+                        retiringLocalTranscriptionTask = nil
+                    }
+                }
+                try Task.checkCancellation()
+                guard transcriptionGeneration.accepts(operationID) else { return }
                 let stored = try await transcriptionCoordinator.transcribe(
                     course: course,
                     segments: segments,
                     modelID: modelID
                 ) { [weak self] update in
-                    Task { @MainActor [weak self] in self?.localTranscriptionProgress = update }
+                    let sequence = progressSequence.next()
+                    Task { @MainActor [weak self] in
+                        self?.applyTranscriptionProgress(
+                            update,
+                            operationID: operationID,
+                            sequence: sequence
+                        )
+                    }
                 }
-                guard !Task.isCancelled else { return }
+                guard transcriptionGeneration.accepts(operationID), !Task.isCancelled else { return }
                 lastLocalTranscriptionResult = stored.result
                 realTranscriptDraft = stored.draft
                 transcriptDraft = stored.draft
+                localTranscriptionProgress = .init(
+                    stage: .completed,
+                    fractionCompleted: 1,
+                    completedSegmentCount: segments.count,
+                    totalSegmentCount: segments.count,
+                    elapsedSeconds: stored.result.metrics.processingDurationSeconds
+                )
                 workspaceNotice = "Transcription brute terminée et enregistrée localement."
             } catch is CancellationError {
+                guard transcriptionGeneration.accepts(operationID) else { return }
                 localTranscriptionProgress.stage = .cancelled
                 localTranscriptionProgress.message = "Transcription annulée proprement."
             } catch {
+                guard transcriptionGeneration.accepts(operationID), !Task.isCancelled else { return }
                 localTranscriptionProgress.stage = .failed
                 localTranscriptionProgress.message = error.localizedDescription
                 errorMessage = "La transcription locale a échoué : \(error.localizedDescription)"
             }
-            isLocalTranscriptionRunning = false
-            localTranscriptionTask = nil
         }
     }
 
     func cancelLocalTranscription() {
-        localTranscriptionTask?.cancel()
+        if let localTranscriptionTask, let operationID = transcriptionGeneration.currentID {
+            localTranscriptionTask.cancel()
+            retiringLocalTranscriptionTask = (operationID, localTranscriptionTask)
+        }
+        if let operationID = transcriptionGeneration.currentID {
+            transcriptionProgressGate.invalidate(operationID: operationID)
+        }
+        _ = transcriptionGeneration.cancelCurrent()
+        localTranscriptionTask = nil
+        isLocalTranscriptionRunning = false
         localTranscriptionProgress.stage = .cancelled
-        localTranscriptionProgress.message = "Annulation en cours…"
+        localTranscriptionProgress.message = "Transcription annulée."
+    }
+
+    private func applyTranscriptionProgress(
+        _ update: LocalTranscriptionProgress,
+        operationID: UUID,
+        sequence: Int
+    ) {
+        guard transcriptionGeneration.accepts(operationID),
+              transcriptionProgressGate.accept(operationID: operationID, sequence: sequence) else { return }
+        localTranscriptionProgress = update
+    }
+
+    private func applyModelDownloadProgress(
+        _ status: TranscriptionModelStatus,
+        operationID: UUID,
+        sequence: Int
+    ) {
+        guard modelDownloadGeneration.accepts(operationID),
+              selectedLocalTranscriptionModel == status.modelID,
+              modelDownloadProgressGate.accept(operationID: operationID, sequence: sequence) else { return }
+        localModelStatus = status
     }
 
     func openRawTranscriptInEditor() {
@@ -415,7 +577,7 @@ final class RecordingViewModel: ObservableObject {
         aiPreferences.selectedModelProfileID = id
         persistAIPreferences()
         aiAPIKeyDraft = ""
-        Task { await refreshAIKeyStatus() }
+        scheduleAIKeyStatusRefresh()
     }
 
     func setAITrialBudget(_ value: Double) {
@@ -532,12 +694,17 @@ final class RecordingViewModel: ObservableObject {
     }
 
     var menuBarSystemImage: String {
+        if recordingWorkflowState == .error { return "exclamationmark.triangle.fill" }
+        if isStartingRecording || isStoppingRecording { return "hourglass" }
         if isRecording { return "record.circle.fill" }
         if isPaused { return "pause.circle.fill" }
         return "waveform"
     }
 
     var menuBarStatus: String {
+        if recordingWorkflowState == .error { return "L'enregistrement nécessite votre attention" }
+        if isStartingRecording { return "Démarrage de l'enregistrement…" }
+        if isStoppingRecording { return "Finalisation de l'enregistrement…" }
         if isRecording { return "Enregistrement — \(formattedElapsed)" }
         if isPaused { return "En pause — \(formattedElapsed)" }
         return "Scrib est prêt"
@@ -572,7 +739,7 @@ final class RecordingViewModel: ObservableObject {
             return
         }
 
-        Task { await beginRecording(with: teacher) }
+        launchRecordingStart(with: teacher)
     }
 
     func prepareQueue() async {
@@ -630,7 +797,7 @@ final class RecordingViewModel: ObservableObject {
             savedTeachers = teacherStore.teachers()
             pendingTeacher = nil
             authorizationRequested = false
-            Task { await beginRecording(with: teacher) }
+            launchRecordingStart(with: teacher)
         } catch {
             errorMessage = "L’autorisation n’a pas pu être mémorisée : \(error.localizedDescription)"
         }
@@ -642,8 +809,11 @@ final class RecordingViewModel: ObservableObject {
     }
 
     func pause() {
+        guard recordingWorkflowState == .recording else { return }
         do {
             try recorder.pause()
+            _ = recordingStartGate.pause()
+            syncRecordingWorkflowState()
             updateSnapshot()
         } catch {
             errorMessage = error.localizedDescription
@@ -651,8 +821,11 @@ final class RecordingViewModel: ObservableObject {
     }
 
     func resume() {
+        guard recordingWorkflowState == .paused else { return }
         do {
             try recorder.resume()
+            _ = recordingStartGate.resume()
+            syncRecordingWorkflowState()
             updateSnapshot()
         } catch {
             errorMessage = error.localizedDescription
@@ -660,27 +833,30 @@ final class RecordingViewModel: ObservableObject {
     }
 
     func stop() {
+        if recordingWorkflowState == .starting {
+            cancelRecordingStart()
+            workspaceNotice = "Démarrage de l'enregistrement annulé."
+            return
+        }
+        guard recordingWorkflowState == .recording || recordingWorkflowState == .paused else { return }
         do {
-            capturedSegments = try recorder.stop().sorted { $0.sequence < $1.sequence }
-            updateSnapshot()
-            stopPolling()
-            endSystemActivity()
-            selectedSection = .localTranscription
-            let capturedCourse = currentCourse
-            Task {
-                await queueCoordinator.recordingDidStop()
-                if let capturedCourse {
-                    do {
-                        _ = try await queueCoordinator.enqueue(course: capturedCourse)
-                    } catch {
-                        errorMessage = "Le cours n’a pas pu être ajouté à la file : \(error.localizedDescription)"
-                    }
-                }
-                await reloadQueue()
-            }
+            let capturedCourse = try finalizeRecording()
+            scheduleRecordingCompletion(for: capturedCourse)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Called by the application delegate before macOS is allowed to terminate.
+    /// It deliberately contains no asynchronous work: recorder finalization and the atomic
+    /// manifest write have both completed when this method returns.
+    func finalizeForTermination() throws {
+        if recordingWorkflowState == .starting {
+            cancelRecordingStart()
+            return
+        }
+        guard recordingWorkflowState == .recording || recordingWorkflowState == .paused else { return }
+        _ = try finalizeRecording()
     }
 
     func presentQuitWarning() {
@@ -688,13 +864,71 @@ final class RecordingViewModel: ObservableObject {
     }
 
     func confirmQuitAndStop() {
-        if hasActiveSession {
-            stop()
+        do {
+            if hasActiveSession {
+                try finalizeForTermination()
+            }
+            NSApplication.shared.terminate(nil)
+        } catch {
+            errorMessage = "Impossible de terminer l'enregistrement avant de quitter : \(error.localizedDescription)"
         }
-        NSApplication.shared.terminate(nil)
     }
 
-    private func beginRecording(with teacher: Teacher) async {
+    private func finalizeRecording() throws -> Course? {
+        guard recordingStartGate.beginStop() else { return nil }
+        syncRecordingWorkflowState()
+        do {
+            capturedSegments = try recorder.stop().sorted { $0.sequence < $1.sequence }
+            updateSnapshot()
+            stopPolling()
+            endSystemActivity()
+            selectedSection = .localTranscription
+            recordingStartGate.stopDidFinish()
+            syncRecordingWorkflowState()
+            return currentCourse
+        } catch {
+            recordingStartGate.stopDidFail()
+            syncRecordingWorkflowState()
+            throw error
+        }
+    }
+
+    private func launchRecordingStart(with teacher: Teacher) {
+        guard let startID = recordingStartGate.beginStart() else { return }
+        syncRecordingWorkflowState()
+        recordingStartTaskID = startID
+        recordingStartTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if recordingStartTaskID == startID {
+                    recordingStartTask = nil
+                    recordingStartTaskID = nil
+                }
+            }
+            await beginRecording(with: teacher, startID: startID)
+        }
+    }
+
+    private func cancelRecordingStart() {
+        guard recordingStartGate.cancelStart() != nil else { return }
+        recordingStartTask?.cancel()
+        recordingStartTask = nil
+        recordingStartTaskID = nil
+        syncRecordingWorkflowState()
+    }
+
+    private func beginRecording(with teacher: Teacher, startID: UUID) async {
+        var queueWasMarkedRecording = false
+        defer {
+            if recordingStartGate.startID == startID {
+                _ = recordingStartGate.recordingStartDidFail(id: startID)
+                syncRecordingWorkflowState()
+            }
+        }
+        guard recordingSessionStore != nil else {
+            errorMessage = "L'enregistrement est indisponible : Scrib ne peut pas sécuriser le manifeste de session audio."
+            return
+        }
         let course = Course(
             semester: selectedSemester,
             teachingUnit: selectedTeachingUnit,
@@ -704,6 +938,8 @@ final class RecordingViewModel: ObservableObject {
         )
 
         do {
+            try Task.checkCancellation()
+            guard recordingStartGate.startID == startID else { throw CancellationError() }
             let directory = try fileStore.recordingDirectory(for: course)
             let available = try fileStore.availableCapacity(for: directory)
             lastAvailableCapacity = available
@@ -718,13 +954,31 @@ final class RecordingViewModel: ObservableObject {
                 return
             }
 
+            try Task.checkCancellation()
+            guard recordingStartGate.startID == startID else { throw CancellationError() }
+            if let recordingCompletionTask {
+                await recordingCompletionTask.value
+            }
+            try Task.checkCancellation()
+            guard recordingStartGate.startID == startID else { throw CancellationError() }
             await queueCoordinator.recordingDidStart()
+            queueWasMarkedRecording = true
+            try Task.checkCancellation()
+            guard recordingStartGate.startID == startID else { throw CancellationError() }
             do {
-                try recorder.start(courseID: course.id, directory: directory)
+                try recorder.start(course: course, directory: directory)
             } catch {
                 await queueCoordinator.recordingDidStop()
+                queueWasMarkedRecording = false
                 throw error
             }
+            guard recordingStartGate.recordingDidStart(id: startID) else {
+                _ = try? recorder.stop()
+                await queueCoordinator.recordingDidStop()
+                queueWasMarkedRecording = false
+                return
+            }
+            syncRecordingWorkflowState()
             currentCourse = course
             capturedSegments = []
             localTranscriptionProgress = .init(stage: .idle)
@@ -732,10 +986,48 @@ final class RecordingViewModel: ObservableObject {
             updateSnapshot()
             beginSystemActivity()
             startPolling()
+        } catch is CancellationError {
+            if queueWasMarkedRecording {
+                await queueCoordinator.recordingDidStop()
+            }
+            if recordingStartGate.startID == startID {
+                _ = recordingStartGate.cancelStart()
+                syncRecordingWorkflowState()
+            }
         } catch let issue as RecordingReadinessIssue {
             errorMessage = message(for: issue)
         } catch {
+            if queueWasMarkedRecording {
+                await queueCoordinator.recordingDidStop()
+            }
             errorMessage = "Impossible de démarrer l’enregistrement : \(error.localizedDescription)"
+        }
+    }
+
+    private func syncRecordingWorkflowState() {
+        recordingWorkflowState = recordingStartGate.state
+    }
+
+    private func scheduleRecordingCompletion(for course: Course?) {
+        let completionID = UUID()
+        recordingCompletionID = completionID
+        recordingCompletionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if recordingCompletionID == completionID {
+                    recordingCompletionTask = nil
+                    recordingCompletionID = nil
+                }
+            }
+            await queueCoordinator.recordingDidStop()
+            if let course {
+                do {
+                    _ = try await queueCoordinator.enqueue(course: course)
+                } catch {
+                    errorMessage = "Le cours n’a pas pu être ajouté à la file : \(error.localizedDescription)"
+                }
+            }
+            await reloadQueue()
         }
     }
 
@@ -780,7 +1072,9 @@ final class RecordingViewModel: ObservableObject {
         if snapshot.state == .failed {
             stopPolling()
             endSystemActivity()
-            Task { await queueCoordinator.recordingDidStop() }
+            recordingStartGate.stopDidFail()
+            syncRecordingWorkflowState()
+            scheduleRecordingCompletion(for: nil)
             errorMessage = snapshot.incidentMessage ?? "L’enregistrement audio s’est interrompu."
         }
     }
@@ -838,13 +1132,50 @@ final class RecordingViewModel: ObservableObject {
         }
     }
 
+    private func restoreRecoverableRecordingSession() {
+        do {
+            guard let recovered = try recordingSessionStore?.recoverableSessions().first else { return }
+            currentCourse = recovered.manifest.course
+            capturedSegments = recovered.recordingSegments
+            snapshot = AudioRecorderSnapshot(
+                state: .finished,
+                elapsed: recovered.recordingSegments.reduce(0) { $0 + $1.duration },
+                segments: recovered.recordingSegments,
+                incidentMessage: recovered.issues.isEmpty ? nil : "Des éléments de cette session nécessitent une vérification."
+            )
+            selectedSection = .segments
+            let issueDetails = recovered.issues.map(\.localizedDescription).joined(separator: " ")
+            workspaceNotice = recovered.issues.isEmpty
+                ? "Une session audio non transcrite a été restaurée pour \(recovered.manifest.course.title)."
+                : "Session audio restaurée avec précaution. \(issueDetails)"
+        } catch {
+            errorMessage = "Une session audio n'a pas pu être restaurée : \(error.localizedDescription)"
+        }
+    }
+
     private func refreshAIKeyStatus() async {
         let provider = selectedAIModelProfile.provider
+        let operationID = aiKeyStatusGeneration.begin()
         do {
-            aiHasStoredKey = try await aiSecretStore.hasSecret(for: provider)
+            let hasKey = try await aiSecretStore.hasSecret(for: provider)
+            guard aiKeyStatusGeneration.finish(operationID),
+                  selectedAIModelProfile.provider == provider else { return }
+            aiHasStoredKey = hasKey
         } catch {
+            guard aiKeyStatusGeneration.finish(operationID),
+                  selectedAIModelProfile.provider == provider,
+                  !Task.isCancelled else { return }
             aiHasStoredKey = false
             errorMessage = "Le Trousseau macOS n’a pas pu être consulté : \(error.localizedDescription)"
+        }
+    }
+
+    private func scheduleAIKeyStatusRefresh() {
+        aiKeyStatusTask?.cancel()
+        aiKeyStatusTask = Task { [weak self] in
+            guard let self else { return }
+            guard !Task.isCancelled else { return }
+            await refreshAIKeyStatus()
         }
     }
 

@@ -5,25 +5,30 @@ import SwiftUI
 @main
 @MainActor
 struct ScribDesktopApp: App {
+    @NSApplicationDelegateAdaptor(ScribApplicationDelegate.self) private var applicationDelegate
     private let environment: AppEnvironment
     @StateObject private var model: RecordingViewModel
 
     init() {
         let environment = AppEnvironment.live()
         self.environment = environment
-        _model = StateObject(
-            wrappedValue: RecordingViewModel(
-                recorder: AVFoundationAudioRecorder(),
-                fileStore: MacCourseFileStore(),
-                teacherStore: UserDefaultsTeacherAuthorizationStore(),
-                queueCoordinator: environment.queueCoordinator,
-                supportImporter: environment.supportImporter,
-                aiSecretStore: environment.aiSecretStore,
-                aiPreferencesStore: environment.aiPreferencesStore,
-                transcriptionCoordinator: environment.transcriptionCoordinator,
-                startupWarning: environment.persistenceWarning
-            )
+        let model = RecordingViewModel(
+            recorder: environment.recordingSessionStore.map { AVFoundationAudioRecorder(sessionStore: $0) }
+                ?? AVFoundationAudioRecorder(),
+            fileStore: MacCourseFileStore(),
+            teacherStore: UserDefaultsTeacherAuthorizationStore(),
+            queueCoordinator: environment.queueCoordinator,
+            supportImporter: environment.supportImporter,
+            aiSecretStore: environment.aiSecretStore,
+            aiPreferencesStore: environment.aiPreferencesStore,
+            transcriptionCoordinator: environment.transcriptionCoordinator,
+            recordingSessionStore: environment.recordingSessionStore,
+            startupWarning: environment.persistenceWarning
         )
+        _model = StateObject(
+            wrappedValue: model
+        )
+        applicationDelegate.recordingModel = model
         Task {
             await MacProcessingNotificationSender().requestAuthorization()
         }
@@ -46,7 +51,7 @@ struct ScribDesktopApp: App {
             }
             Divider()
             Button("Quitter Scrib") {
-                guard !model.isRecording && !model.isPaused else {
+                guard !model.hasActiveSession else {
                     model.presentQuitWarning()
                     return
                 }

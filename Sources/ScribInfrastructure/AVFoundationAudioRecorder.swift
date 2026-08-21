@@ -87,6 +87,7 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
 
     private let fileManager: FileManager
     private let permissionProvider: any MicrophonePermissionProviding
+    private let sessionStore: (any RecordingSessionStoring)?
     private lazy var recorderDelegate = AudioRecorderDelegate { [weak self] details, fileURL in
         Task { @MainActor [weak self] in
             self?.handleRecorderFailure(details: details, fileURL: fileURL)
@@ -95,6 +96,8 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
     private var recorder: AVAudioRecorder?
     private var courseID: CourseID?
     private var directory: URL?
+    private var sessionID: UUID?
+    private var activeRelativePath: String?
     private var segmentStartedAt: Date?
     private var segments: [RecordingSegment] = []
     private var state: AudioRecorderState = .idle
@@ -106,16 +109,27 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
     public convenience init(fileManager: FileManager = .default) {
         self.init(
             fileManager: fileManager,
-            permissionProvider: AVCaptureDeviceMicrophonePermissionProvider()
+            permissionProvider: AVCaptureDeviceMicrophonePermissionProvider(),
+            sessionStore: try? LocalRecordingSessionStore(fileManager: fileManager)
+        )
+    }
+
+    public convenience init(sessionStore: any RecordingSessionStoring, fileManager: FileManager = .default) {
+        self.init(
+            fileManager: fileManager,
+            permissionProvider: AVCaptureDeviceMicrophonePermissionProvider(),
+            sessionStore: sessionStore
         )
     }
 
     init(
         fileManager: FileManager,
-        permissionProvider: any MicrophonePermissionProviding
+        permissionProvider: any MicrophonePermissionProviding,
+        sessionStore: (any RecordingSessionStoring)? = nil
     ) {
         self.fileManager = fileManager
         self.permissionProvider = permissionProvider
+        self.sessionStore = sessionStore
         super.init()
         observeDeviceDisconnections()
     }
@@ -143,16 +157,29 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
         }
     }
 
-    public func start(courseID: CourseID, directory: URL) throws {
+    public func start(course: Course, directory: URL) throws {
         guard state != .recording && state != .paused else {
             throw AVFoundationAudioRecorderError.alreadyActive
         }
+        guard let sessionStore else {
+            throw AVFoundationAudioRecorderError.cannotStart(
+                "Le stockage du manifeste de session est indisponible."
+            )
+        }
 
-        self.courseID = courseID
+        let manifest = try sessionStore.createSession(course: course, directory: directory)
+        self.courseID = course.id
         self.directory = directory
+        self.sessionID = manifest.sessionID
         segments = []
         incidentMessage = nil
-        try startNewSegment()
+        do {
+            try startNewSegment()
+        } catch {
+            markActiveSegmentFailed()
+            state = .failed
+            throw error
+        }
     }
 
     public func pause() throws {
@@ -166,7 +193,13 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
         guard state == .paused else {
             throw AVFoundationAudioRecorderError.notRecording
         }
-        try startNewSegment()
+        do {
+            try startNewSegment()
+        } catch {
+            markActiveSegmentFailed()
+            state = .failed
+            throw error
+        }
     }
 
     public func stop() throws -> [RecordingSegment] {
@@ -174,9 +207,10 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
         case .recording:
             try finishCurrentSegment(nextState: .finished)
         case .paused:
-            state = .finished
             rolloverTask?.cancel()
             rolloverTask = nil
+            try finishSessionManifest()
+            state = .finished
         case .idle, .finished, .failed:
             throw AVFoundationAudioRecorderError.notRecording
         }
@@ -200,16 +234,15 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
     }
 
     private func startNewSegment() throws {
-        guard let courseID, let directory else {
+        guard let courseID, let directory, let sessionID, let sessionStore else {
             throw AVFoundationAudioRecorderError.cannotStart(
                 "La configuration de destination est indisponible."
             )
         }
 
         let sequence = segments.count + 1
-        let fileURL = directory.appendingPathComponent(
-            String(format: "segment-%04d.m4a", sequence)
-        )
+        let relativePath = String(format: "segment-%04d.m4a", sequence)
+        let fileURL = directory.appendingPathComponent(relativePath)
         guard fileURL.pathExtension.lowercased() == "m4a" else {
             throw AVFoundationAudioRecorderError.cannotStart(
                 "L’extension de destination ne correspond pas au conteneur AAC/MPEG-4 attendu."
@@ -221,6 +254,15 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
             AVNumberOfChannelsKey: AudioStoragePolicy.captureChannelCount,
             AVEncoderBitRateKey: Int(AudioStoragePolicy.targetBitRate)
         ]
+
+        let persistedSegment = try sessionStore.beginSegment(
+            sessionID: sessionID,
+            in: directory,
+            relativePath: relativePath,
+            sequence: sequence,
+            startedAt: Date()
+        )
+        activeRelativePath = persistedSegment.relativePath
 
         try prepareDestinationDirectory(directory, fileURL: fileURL)
         let inputDevice = AVCaptureDevice.default(for: .audio)
@@ -235,6 +277,7 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
         do {
             newRecorder = try AVAudioRecorder(url: fileURL, settings: settings)
         } catch {
+            markActiveSegmentFailed()
             let details = audioErrorDetails(error)
             logAudioRecordingError("Création AVAudioRecorder échouée; url=\(fileURL.path); \(details)")
             throw AVFoundationAudioRecorderError.cannotStart(details)
@@ -246,6 +289,7 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
         let prepared = newRecorder.prepareToRecord()
         logAudioRecording("prepareToRecord=\(prepared); url=\(fileURL.path); format=\(newRecorder.format)")
         guard prepared else {
+            markActiveSegmentFailed()
             throw AVFoundationAudioRecorderError.cannotStart(
                 "AVAudioRecorder.prepareToRecord() a retourné false."
             )
@@ -256,12 +300,13 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
         logAudioRecording("record=\(recordingStarted); isRecording=\(newRecorder.isRecording); url=\(fileURL.path)")
         guard recordingStarted else {
             recorder = nil
+            markActiveSegmentFailed()
             throw AVFoundationAudioRecorderError.cannotStart(
                 "AVAudioRecorder.record() a retourné false."
             )
         }
 
-        segmentStartedAt = Date()
+        segmentStartedAt = persistedSegment.createdAt
         state = .recording
         activeInputName = inputDevice?.localizedName
             ?? "Microphone système"
@@ -319,12 +364,13 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
 
         rolloverTask?.cancel()
         rolloverTask = nil
+        markActiveSegmentFailed(fileURL: fileURL)
         state = .failed
         incidentMessage = "L’enregistrement audio a échoué : \(details)"
     }
 
     private func finishCurrentSegment(nextState: AudioRecorderState) throws {
-        guard let recorder, let courseID, let segmentStartedAt else {
+        guard let recorder, let courseID, let directory, let sessionID, let sessionStore, let segmentStartedAt else {
             throw AVFoundationAudioRecorderError.notRecording
         }
 
@@ -336,20 +382,59 @@ public final class AVFoundationAudioRecorder: NSObject, AudioRecording {
             atPath: recorder.url.path
         )
         let byteCount = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
-        segments.append(
-            RecordingSegment(
-                courseID: courseID,
-                sequence: segments.count + 1,
-                fileURL: recorder.url,
-                startedAt: segmentStartedAt,
-                endedAt: endedAt,
-                byteCount: byteCount
-            )
+        let segment = RecordingSegment(
+            courseID: courseID,
+            sequence: segments.count + 1,
+            fileURL: recorder.url,
+            startedAt: segmentStartedAt,
+            endedAt: endedAt,
+            byteCount: byteCount
         )
+
+        do {
+            try sessionStore.finalizeSegment(
+                sessionID: sessionID,
+                in: directory,
+                segment: segment,
+                nextSessionState: nextState == .finished ? .stopped : .paused
+            )
+        } catch {
+            self.recorder = nil
+            self.segmentStartedAt = nil
+            self.activeRelativePath = nil
+            state = .failed
+            incidentMessage = "Le segment audio a été arrêté, mais son manifeste n'a pas pu être enregistré : \(error.localizedDescription)"
+            throw error
+        }
+
+        segments.append(segment)
 
         self.recorder = nil
         self.segmentStartedAt = nil
+        self.activeRelativePath = nil
         state = nextState
+    }
+
+    private func finishSessionManifest() throws {
+        guard let sessionID, let directory, let sessionStore else {
+            throw AVFoundationAudioRecorderError.notRecording
+        }
+        try sessionStore.finishSession(sessionID: sessionID, in: directory)
+    }
+
+    private func markActiveSegmentFailed(fileURL: URL? = nil) {
+        guard let sessionID, let directory, let sessionStore, let activeRelativePath else { return }
+        let url = fileURL ?? directory.appendingPathComponent(activeRelativePath)
+        let attributes = try? fileManager.attributesOfItem(atPath: url.path)
+        let byteCount = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+        try? sessionStore.failActiveSegment(
+            sessionID: sessionID,
+            in: directory,
+            relativePath: activeRelativePath,
+            endedAt: Date(),
+            byteCount: byteCount
+        )
+        self.activeRelativePath = nil
     }
 
     private func scheduleRollover() {

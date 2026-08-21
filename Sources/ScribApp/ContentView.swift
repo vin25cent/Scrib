@@ -328,7 +328,7 @@ private struct RecordingControlCard: View {
     }
 
     private var statusIcon: some View {
-        Image(systemName: model.isRecording ? "record.circle.fill" : model.isPaused ? "pause.circle.fill" : "waveform.circle")
+        Image(systemName: model.recordingWorkflowState == .error ? "exclamationmark.triangle.fill" : model.isStartingRecording || model.isStoppingRecording ? "hourglass.circle" : model.isRecording ? "record.circle.fill" : model.isPaused ? "pause.circle.fill" : "waveform.circle")
             .font(.system(size: 30, weight: .medium))
             .foregroundStyle(model.isRecording ? .red : ScribDesign.accent)
             .frame(width: 48, height: 48)
@@ -339,6 +339,9 @@ private struct RecordingControlCard: View {
     }
 
     private var statusTitle: String {
+        if model.recordingWorkflowState == .error { return "Erreur d’enregistrement" }
+        if model.isStartingRecording { return "Démarrage de l’enregistrement…" }
+        if model.isStoppingRecording { return "Finalisation de l’enregistrement…" }
         if model.isRecording { return "Enregistrement — \(model.formattedElapsed)" }
         if model.isPaused { return "En pause — \(model.formattedElapsed)" }
         if model.snapshot.state == .finished { return "Enregistrement terminé" }
@@ -346,6 +349,15 @@ private struct RecordingControlCard: View {
     }
 
     private var statusSubtitle: String {
+        if model.recordingWorkflowState == .error {
+            return model.errorMessage ?? "L’enregistrement nécessite votre attention."
+        }
+        if model.isStartingRecording {
+            return "Vérification du stockage et de l’autorisation microphone."
+        }
+        if model.isStoppingRecording {
+            return "Finalisation du segment et sécurisation du manifeste."
+        }
         if model.hasActiveSession {
             return "\(model.snapshot.segments.count) segment(s) finalisé(s)"
         }
@@ -357,7 +369,16 @@ private struct RecordingControlCard: View {
 
     @ViewBuilder
     private var controls: some View {
-        if model.isRecording {
+        if model.isStartingRecording {
+            HStack {
+                ProgressView()
+                    .controlSize(.small)
+                Button("Annuler") { model.stop() }
+            }
+        } else if model.isStoppingRecording {
+            ProgressView()
+                .controlSize(.small)
+        } else if model.isRecording {
             HStack {
                 Button("Pause") { model.pause() }
                 Button("Terminer", role: .destructive) { model.stop() }

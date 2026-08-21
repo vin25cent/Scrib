@@ -9,11 +9,38 @@ public protocol CourseRepository: Sendable {
 @MainActor
 public protocol AudioRecording: AnyObject {
     func requestPermission() async -> Bool
-    func start(courseID: CourseID, directory: URL) throws
+    func start(course: Course, directory: URL) throws
     func pause() throws
     func resume() throws
     func stop() throws -> [RecordingSegment]
     func snapshot() -> AudioRecorderSnapshot
+}
+
+@MainActor
+public protocol RecordingSessionStoring: AnyObject {
+    func createSession(course: Course, directory: URL) throws -> RecordingSessionManifest
+    func beginSegment(
+        sessionID: UUID,
+        in directory: URL,
+        relativePath: String,
+        sequence: Int,
+        startedAt: Date
+    ) throws -> RecordingSessionManifest.Segment
+    func finalizeSegment(
+        sessionID: UUID,
+        in directory: URL,
+        segment: RecordingSegment,
+        nextSessionState: RecordingSessionFinalizationState
+    ) throws
+    func failActiveSegment(
+        sessionID: UUID,
+        in directory: URL,
+        relativePath: String,
+        endedAt: Date,
+        byteCount: Int64
+    ) throws
+    func finishSession(sessionID: UUID, in directory: URL) throws
+    func recoverableSessions() throws -> [RecoveredRecordingSession]
 }
 
 @MainActor

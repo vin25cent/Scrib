@@ -8,6 +8,7 @@ struct AppEnvironment {
     let aiSecretStore: any AISecretStoring
     let aiPreferencesStore: any AIGenerationPreferencesStoring
     let transcriptionCoordinator: LocalTranscriptionCoordinator
+    let recordingSessionStore: (any RecordingSessionStoring)?
     let persistenceWarning: String?
 
     static func live() -> AppEnvironment {
@@ -40,6 +41,14 @@ struct AppEnvironment {
         let aiSecretStore: any AISecretStoring = MacKeychainSecretStore()
         let aiPreferencesStore = UserDefaultsAIGenerationPreferencesStore()
 
+        let recordingSessionStore: (any RecordingSessionStoring)?
+        do {
+            recordingSessionStore = try LocalRecordingSessionStore()
+        } catch {
+            recordingSessionStore = nil
+            warnings.append("Les sessions audio ne peuvent pas être sécurisées : \(error.localizedDescription)")
+        }
+
         let transcriptionCoordinator: LocalTranscriptionCoordinator
         do {
             let modelManager = try WhisperKitModelManager()
@@ -66,6 +75,7 @@ struct AppEnvironment {
             aiSecretStore: aiSecretStore,
             aiPreferencesStore: aiPreferencesStore,
             transcriptionCoordinator: transcriptionCoordinator,
+            recordingSessionStore: recordingSessionStore,
             persistenceWarning: warnings.isEmpty ? nil : warnings.joined(separator: "\n")
         )
     }
