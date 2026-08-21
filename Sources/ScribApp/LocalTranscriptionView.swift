@@ -18,6 +18,9 @@ struct LocalTranscriptionView: View {
                 LocalTranscriptionEngineCard()
                 LocalTranscriptionModelCard(model: model)
                 LocalTranscriptionAudioCard(model: model)
+                if model.hasPendingTranscriptionReplacement {
+                    PendingTranscriptionReplacementCard(model: model)
+                }
                 if let result = model.lastLocalTranscriptionResult {
                     LocalTranscriptionResultCard(model: model, result: result)
                 }
@@ -231,10 +234,25 @@ private struct LocalTranscriptionAudioCard: View {
                 }
                 .buttonStyle(.bordered)
             } else {
-                Button("Transcrire localement") { model.startLocalTranscription() }
+                Button(model.lastLocalTranscriptionResult == nil
+                    ? "Transcrire localement"
+                    : "Retranscrire l’audio") {
+                    if model.lastLocalTranscriptionResult == nil {
+                        model.startLocalTranscription()
+                    } else {
+                        model.retranscribeAudio()
+                    }
+                }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(!model.canStartLocalTranscription)
+                    .disabled(model.lastLocalTranscriptionResult == nil
+                        ? !model.canStartLocalTranscription
+                        : !model.canRetranscribeAudio)
+                if model.lastLocalTranscriptionResult != nil {
+                    Text("Utiliser les enregistrements existants")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
             availabilityHint
@@ -244,9 +262,15 @@ private struct LocalTranscriptionAudioCard: View {
     @ViewBuilder
     private var availabilityHint: some View {
         if model.capturedSegments.isEmpty {
-            Text("Enregistrez puis arrêtez un cours pour activer la transcription.")
+            Text(model.lastLocalTranscriptionResult == nil
+                ? "Enregistrez puis arrêtez un cours pour activer la transcription."
+                : "Aucun enregistrement existant n’est disponible pour ce cours.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        } else if let issue = model.existingAudioIssues.first {
+            Text(issue.localizedDescription)
+                .font(.caption)
+                .foregroundStyle(.red)
         } else if model.localModelStatus.availability != .available {
             Text("Téléchargez d’abord le modèle sélectionné.")
                 .font(.caption)
@@ -267,6 +291,32 @@ private struct LocalTranscriptionAudioCard: View {
         case .cancelled: "Annulé"
         case .failed: "Erreur"
         }
+    }
+}
+
+private struct PendingTranscriptionReplacementCard: View {
+    @ObservedObject var model: RecordingViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ScribSectionHeading(
+                "Nouvelle transcription prête",
+                subtitle: "L’ancienne transcription est toujours conservée sur disque.",
+                icon: "arrow.triangle.2.circlepath"
+            )
+            Text("Choisissez la version à conserver. Aucun remplacement n’a lieu avant votre confirmation.")
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Conserver l’ancienne") { model.keepExistingTranscription() }
+                    .buttonStyle(.bordered)
+                Spacer()
+                Button("Remplacer l’ancienne transcription") {
+                    model.confirmTranscriptionReplacement()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .scribCard()
     }
 }
 

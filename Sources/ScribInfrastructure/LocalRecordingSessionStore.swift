@@ -136,6 +136,16 @@ public final class LocalRecordingSessionStore: RecordingSessionStoring {
     }
 
     public func recoverableSessions() throws -> [RecoveredRecordingSession] {
+        try discoveredSessions(includeTranscribed: false)
+    }
+
+    public func recordingSession(for courseID: CourseID) throws -> RecoveredRecordingSession? {
+        try discoveredSessions(includeTranscribed: true)
+            .filter { $0.manifest.courseID == courseID }
+            .max { $0.manifest.updatedAt < $1.manifest.updatedAt }
+    }
+
+    private func discoveredSessions(includeTranscribed: Bool) throws -> [RecoveredRecordingSession] {
         guard let enumerator = fileManager.enumerator(
             at: rootDirectory,
             includingPropertiesForKeys: nil,
@@ -149,12 +159,19 @@ public final class LocalRecordingSessionStore: RecordingSessionStoring {
             guard manifest.courseID == manifest.course.id else { continue }
 
             // A successful local transcription is already the durable successor of this session.
-            guard !isTranscribed(courseID: manifest.courseID) else { continue }
+            guard includeTranscribed || !isTranscribed(courseID: manifest.courseID) else { continue }
 
             let directory = url.deletingLastPathComponent()
             var issues = decoded.issues
             var segments: [RecordingSegment] = []
+            var seenIDs = Set<UUID>()
+            var seenSequences = Set<Int>()
             for stored in manifest.segments.sorted(by: { $0.sequence < $1.sequence }) {
+                guard seenIDs.insert(stored.id).inserted,
+                      seenSequences.insert(stored.sequence).inserted else {
+                    issues.append(.duplicateSegment(sequence: stored.sequence))
+                    continue
+                }
                 guard isSafeRelativePath(stored.relativePath) else {
                     issues.append(.malformedSegment(relativePath: stored.relativePath))
                     continue
@@ -170,6 +187,7 @@ public final class LocalRecordingSessionStore: RecordingSessionStoring {
                 }
                 let attributes = try? fileManager.attributesOfItem(atPath: audioURL.path)
                 let endedAt = stored.finalizedAt
+                    ?? stored.durationSeconds.map { stored.createdAt.addingTimeInterval($0) }
                     ?? (attributes?[.modificationDate] as? Date)
                     ?? stored.createdAt
                 let byteCount = stored.byteCount

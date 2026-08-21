@@ -4,11 +4,14 @@ import ScribDomain
 
 public enum LocalTranscriptionStoreError: LocalizedError, Sendable {
     case noStoredTranscription(CourseID)
+    case noReplacementCandidate(CourseID)
 
     public var errorDescription: String? {
         switch self {
         case .noStoredTranscription:
             "La transcription locale à mettre à jour est introuvable."
+        case .noReplacementCandidate:
+            "La nouvelle transcription à confirmer est introuvable."
         }
     }
 }
@@ -37,6 +40,43 @@ public actor LocalTranscriptionStore: LocalTranscriptionStoring {
 
     public func save(_ transcription: StoredLocalTranscription) throws {
         let destination = fileURL(for: transcription.course.id)
+        try write(transcription, to: destination)
+    }
+
+    public func saveReplacementCandidate(_ transcription: StoredLocalTranscription) throws {
+        try write(transcription, to: candidateFileURL(for: transcription.course.id))
+    }
+
+    public func replacementCandidate(for courseID: CourseID) throws -> StoredLocalTranscription? {
+        let url = candidateFileURL(for: courseID)
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return try decode(from: url)
+    }
+
+    public func promoteReplacementCandidate(
+        for courseID: CourseID
+    ) throws -> StoredLocalTranscription {
+        guard let candidate = try replacementCandidate(for: courseID) else {
+            throw LocalTranscriptionStoreError.noReplacementCandidate(courseID)
+        }
+        try save(candidate)
+        try discardReplacementCandidate(for: courseID)
+        return candidate
+    }
+
+    public func discardReplacementCandidate(for courseID: CourseID) throws {
+        let url = candidateFileURL(for: courseID)
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        try fileManager.removeItem(at: url)
+    }
+
+    public func transcription(for courseID: CourseID) throws -> StoredLocalTranscription? {
+        let url = fileURL(for: courseID)
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return try decode(from: url)
+    }
+
+    private func write(_ transcription: StoredLocalTranscription, to destination: URL) throws {
         try fileManager.createDirectory(
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -83,6 +123,13 @@ public actor LocalTranscriptionStore: LocalTranscriptionStoring {
             .appendingPathComponent(courseID.rawValue.uuidString, isDirectory: true)
             .appendingPathComponent("transcription", isDirectory: true)
             .appendingPathComponent("raw-transcription.json")
+    }
+
+    private func candidateFileURL(for courseID: CourseID) -> URL {
+        rootDirectory
+            .appendingPathComponent(courseID.rawValue.uuidString, isDirectory: true)
+            .appendingPathComponent("transcription", isDirectory: true)
+            .appendingPathComponent("replacement-candidate.json")
     }
 
     private func decode(from url: URL) throws -> StoredLocalTranscription {

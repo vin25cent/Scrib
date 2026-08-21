@@ -17,6 +17,8 @@ final class LocalTranscriptionWorkflow: ObservableObject {
     @Published private(set) var lastResult: LocalTranscriptionResult?
     @Published private(set) var isDownloadingModel = false
     @Published private(set) var isRunning = false
+    @Published private(set) var isRetranscribing = false
+    @Published private(set) var pendingReplacement: StoredLocalTranscription?
     private var lastTransformations: [TranscriptTransformation] = []
 
     var reportError: @MainActor (String) -> Void = { _ in }
@@ -81,6 +83,7 @@ final class LocalTranscriptionWorkflow: ObservableObject {
         realDraft = nil
         transcriptDraft = nil
         lastTransformations = []
+        pendingReplacement = nil
     }
 
     func restoreLatest() async -> StoredLocalTranscription? {
@@ -216,7 +219,30 @@ final class LocalTranscriptionWorkflow: ObservableObject {
         isDownloadingModel = false
     }
 
-    func start(course: Course?, segments: [RecordingSegment]) {
+    func start(
+        course: Course?, segments: [RecordingSegment],
+        supportDocuments: [SupportDocumentExtraction] = []
+    ) {
+        startOperation(
+            course: course, segments: segments, supportDocuments: supportDocuments,
+            mode: .normal)
+    }
+
+    func retranscribe(
+        course: Course?, segments: [RecordingSegment],
+        supportDocuments: [SupportDocumentExtraction] = []
+    ) {
+        startOperation(
+            course: course, segments: segments, supportDocuments: supportDocuments,
+            mode: .retranscription)
+    }
+
+    private enum OperationMode: Equatable, Sendable { case normal, retranscription }
+
+    private func startOperation(
+        course: Course?, segments: [RecordingSegment],
+        supportDocuments: [SupportDocumentExtraction], mode: OperationMode
+    ) {
         guard let course, canStart(course: course, segments: segments) else { return }
         let modelID = selectedModel
         let id = transcriptionGeneration.begin()
@@ -224,6 +250,8 @@ final class LocalTranscriptionWorkflow: ObservableObject {
         let predecessor = retiringTranscriptionTask
         transcriptionProgressGate.begin(operationID: id)
         isRunning = true
+        isRetranscribing = mode == .retranscription
+        if mode == .normal { pendingReplacement = nil }
         progress = .init(
             stage: .checkingModel, fractionCompleted: 0, totalSegmentCount: segments.count)
         transcriptionTask = Task { [weak self] in
@@ -233,6 +261,7 @@ final class LocalTranscriptionWorkflow: ObservableObject {
                 if transcriptionGeneration.finish(id) {
                     transcriptionProgressGate.invalidate(operationID: id)
                     isRunning = false
+                    isRetranscribing = false
                     transcriptionTask = nil
                 }
             }
@@ -256,9 +285,7 @@ final class LocalTranscriptionWorkflow: ObservableObject {
                         "La transcription continue, mais son suivi n’a pas pu être mis à jour : \(error.localizedDescription)"
                     )
                 }
-                let stored = try await coordinator.transcribe(
-                    course: course, segments: segments, modelID: modelID
-                ) { [weak self] update in
+                let progressHandler: @Sendable (LocalTranscriptionProgress) -> Void = { [weak self] update in
                     let callbackSequence = sequence.next()
                     Task { @MainActor [weak self] in
                         self?.applyProgress(
@@ -266,11 +293,26 @@ final class LocalTranscriptionWorkflow: ObservableObject {
                         )
                     }
                 }
+                let completion: RetranscriptionCompletion
+                switch mode {
+                case .normal:
+                    let stored = try await coordinator.transcribe(
+                        course: course, segments: segments, modelID: modelID,
+                        supportDocuments: supportDocuments, progress: progressHandler)
+                    completion = .saved(stored)
+                case .retranscription:
+                    completion = try await coordinator.retranscribe(
+                        course: course, segments: segments, modelID: modelID,
+                        supportDocuments: supportDocuments, progress: progressHandler)
+                }
                 guard transcriptionGeneration.accepts(id), !Task.isCancelled else { return }
-                lastResult = stored.result
-                lastTransformations = stored.transformations ?? []
-                realDraft = stored.draft
-                transcriptDraft = stored.draft
+                let stored = completion.transcription
+                switch completion {
+                case .saved:
+                    applyCompletedTranscription(stored)
+                case .replacementPending:
+                    pendingReplacement = stored
+                }
                 progress = .init(
                     stage: .completed, fractionCompleted: 1, completedSegmentCount: segments.count,
                     totalSegmentCount: segments.count,
@@ -284,7 +326,12 @@ final class LocalTranscriptionWorkflow: ObservableObject {
                         "La transcription est terminée, mais son suivi n’a pas pu être mis à jour : \(error.localizedDescription)"
                     )
                 }
-                reportNotice("Transcription brute terminée et enregistrée localement.")
+                switch completion {
+                case .saved:
+                    reportNotice("Transcription brute terminée et enregistrée localement.")
+                case .replacementPending:
+                    reportNotice("La nouvelle transcription est prête. Confirmez son remplacement.")
+                }
             } catch is CancellationError {
                 guard transcriptionGeneration.accepts(id) else { return }
                 progress.stage = .cancelled
@@ -302,6 +349,35 @@ final class LocalTranscriptionWorkflow: ObservableObject {
                     courseID: course.id, activity: .localTranscription,
                     error: error.localizedDescription)
                 await trackingDidChange()
+            }
+        }
+    }
+
+    func confirmPendingReplacement(courseID: CourseID?) {
+        guard let courseID, pendingReplacement?.course.id == courseID else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let stored = try await coordinator.confirmReplacement(for: courseID)
+                applyCompletedTranscription(stored)
+                pendingReplacement = nil
+                reportNotice("L’ancienne transcription a été remplacée.")
+            } catch {
+                reportError("Le remplacement n’a pas pu être effectué : \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func keepExistingTranscription(courseID: CourseID?) {
+        guard let courseID, pendingReplacement?.course.id == courseID else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await coordinator.keepExistingTranscription(for: courseID)
+                pendingReplacement = nil
+                reportNotice("L’ancienne transcription a été conservée.")
+            } catch {
+                reportError("Le choix n’a pas pu être enregistré : \(error.localizedDescription)")
             }
         }
     }
@@ -346,6 +422,12 @@ final class LocalTranscriptionWorkflow: ObservableObject {
                     "La modification n’a pas pu être enregistrée : \(error.localizedDescription)")
             }
         }
+    }
+    private func applyCompletedTranscription(_ stored: StoredLocalTranscription) {
+        lastResult = stored.result
+        lastTransformations = stored.transformations ?? []
+        realDraft = stored.draft
+        transcriptDraft = stored.draft
     }
     private func scheduleModelStatusRefresh() {
         modelStatusTask?.cancel()

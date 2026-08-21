@@ -36,6 +36,8 @@ public protocol RecordingSessionStoring: AnyObject {
     ) throws
     func finishSession(sessionID: UUID, in directory: URL) throws
     func recoverableSessions() throws -> [RecoveredRecordingSession]
+    /// Returns persisted audio metadata for a course even when it was already transcribed.
+    func recordingSession(for courseID: CourseID) throws -> RecoveredRecordingSession?
 }
 
 @MainActor
@@ -110,7 +112,12 @@ public protocol TranscriptionModelManaging: Sendable {
 
 public protocol LocalTranscriptionStoring: Sendable {
     func save(_ transcription: StoredLocalTranscription) async throws
+    func saveReplacementCandidate(_ transcription: StoredLocalTranscription) async throws
+    func replacementCandidate(for courseID: CourseID) async throws -> StoredLocalTranscription?
+    func promoteReplacementCandidate(for courseID: CourseID) async throws -> StoredLocalTranscription
+    func discardReplacementCandidate(for courseID: CourseID) async throws
     func updateDraft(_ draft: TranscriptDraft) async throws
+    func transcription(for courseID: CourseID) async throws -> StoredLocalTranscription?
     func latest() async throws -> StoredLocalTranscription?
 }
 

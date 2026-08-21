@@ -130,6 +130,7 @@ import UniformTypeIdentifiers
     var snapshot: AudioRecorderSnapshot { recording.snapshot }
     var currentCourse: Course? { recording.currentCourse }
     var capturedSegments: [RecordingSegment] { recording.capturedSegments }
+    var existingAudioIssues: [RecordingSessionRecoveryIssue] { recording.existingAudioIssues }
     var lastAvailableCapacity: Int64? { recording.lastAvailableCapacity }
     var lowSoundWarning: Bool { recording.lowSoundWarning }
     var processingJobs: [ProcessingJob] { recording.processingJobs }
@@ -184,6 +185,8 @@ import UniformTypeIdentifiers
     var lastLocalTranscriptionResult: LocalTranscriptionResult? { transcription.lastResult }
     var isDownloadingTranscriptionModel: Bool { transcription.isDownloadingModel }
     var isLocalTranscriptionRunning: Bool { transcription.isRunning }
+    var isRetranscribingAudio: Bool { transcription.isRetranscribing }
+    var hasPendingTranscriptionReplacement: Bool { transcription.pendingReplacement != nil }
     var localTranscriptionModels: [TranscriptionModelDescriptor] { transcription.models }
     var selectedLocalTranscriptionModelDescriptor: TranscriptionModelDescriptor {
         transcription.selectedModelDescriptor
@@ -193,7 +196,11 @@ import UniformTypeIdentifiers
         transcription.transcriptionForExport(course: currentCourse, segments: capturedSegments)
     }
     var canStartLocalTranscription: Bool {
-        transcription.canStart(course: currentCourse, segments: capturedSegments)
+        existingAudioIssues.isEmpty
+            && transcription.canStart(course: currentCourse, segments: capturedSegments)
+    }
+    var canRetranscribeAudio: Bool {
+        lastLocalTranscriptionResult != nil && canStartLocalTranscription
     }
     var filteredTranscriptPassages: [TranscriptPassage] { transcription.filteredPassages }
     func transcriptTextBinding(for passageID: UUID) -> Binding<String> {
@@ -215,7 +222,24 @@ import UniformTypeIdentifiers
     func downloadSelectedTranscriptionModel() { transcription.downloadSelectedModel() }
     func cancelModelDownload() { transcription.cancelModelDownload() }
     func startLocalTranscription() {
-        transcription.start(course: currentCourse, segments: capturedSegments)
+        transcription.start(
+            course: currentCourse, segments: capturedSegments,
+            supportDocuments: supportDocuments.compactMap(\.extraction))
+    }
+    func retranscribeAudio() {
+        guard existingAudioIssues.isEmpty else {
+            errorMessage = existingAudioIssues.map(\.localizedDescription).joined(separator: " ")
+            return
+        }
+        transcription.retranscribe(
+            course: currentCourse, segments: capturedSegments,
+            supportDocuments: supportDocuments.compactMap(\.extraction))
+    }
+    func confirmTranscriptionReplacement() {
+        transcription.confirmPendingReplacement(courseID: currentCourse?.id)
+    }
+    func keepExistingTranscription() {
+        transcription.keepExistingTranscription(courseID: currentCourse?.id)
     }
     func cancelLocalTranscription() { transcription.cancel(courseID: currentCourse?.id) }
     func openRawTranscriptInEditor() {

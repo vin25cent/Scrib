@@ -90,6 +90,7 @@ public enum RecordingSessionRecoveryIssue: Equatable, Sendable {
     case malformedSegment(relativePath: String?)
     case missingAudioFile(relativePath: String)
     case incompleteSegment(relativePath: String)
+    case duplicateSegment(sequence: Int)
 
     public var localizedDescription: String {
         switch self {
@@ -104,6 +105,8 @@ public enum RecordingSessionRecoveryIssue: Equatable, Sendable {
             return "Le fichier audio référencé est absent : \(path)."
         case let .incompleteSegment(path):
             return "Le segment audio n'a pas été finalisé : \(path)."
+        case let .duplicateSegment(sequence):
+            return "Le segment audio n°\(sequence) est référencé plusieurs fois."
         }
     }
 }

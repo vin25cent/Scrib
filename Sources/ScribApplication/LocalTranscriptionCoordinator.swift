@@ -6,6 +6,7 @@ public enum LocalTranscriptionError: LocalizedError, Equatable, Sendable {
     case inconsistentCourse
     case modelUnavailable(LocalTranscriptionModelID)
     case modelDisabled(LocalTranscriptionModelID)
+    case noPendingReplacement
 
     public var errorDescription: String? {
         switch self {
@@ -17,6 +18,19 @@ public enum LocalTranscriptionError: LocalizedError, Equatable, Sendable {
             "Le modèle \(modelID.rawValue) n’est pas encore téléchargé."
         case let .modelDisabled(modelID):
             "Le modèle \(modelID.rawValue) est préparé pour un benchmark ultérieur, mais désactivé dans cette alpha."
+        case .noPendingReplacement:
+            "Aucune nouvelle transcription n’attend de confirmation."
+        }
+    }
+}
+
+public enum RetranscriptionCompletion: Equatable, Sendable {
+    case saved(StoredLocalTranscription)
+    case replacementPending(StoredLocalTranscription)
+
+    public var transcription: StoredLocalTranscription {
+        switch self {
+        case let .saved(transcription), let .replacementPending(transcription): transcription
         }
     }
 }
@@ -87,6 +101,10 @@ public struct TranscriptBoundaryDeduplicator: Sendable {
 }
 
 public actor LocalTranscriptionCoordinator {
+    private enum PersistenceMode {
+        case saveImmediately
+        case stageWhenReplacing
+    }
     private let engine: any TranscriptionEngine
     private let modelManager: any TranscriptionModelManaging
     private let store: any LocalTranscriptionStoring
@@ -131,6 +149,51 @@ public actor LocalTranscriptionCoordinator {
         supportDocuments: [SupportDocumentExtraction] = [],
         progress: @escaping @Sendable (LocalTranscriptionProgress) -> Void
     ) async throws -> StoredLocalTranscription {
+        try await performTranscription(
+            course: course,
+            segments: segments,
+            modelID: modelID,
+            globalGlossary: globalGlossary,
+            courseGlossary: courseGlossary,
+            supportDocuments: supportDocuments,
+            persistence: .saveImmediately,
+            progress: progress
+        ).transcription
+    }
+
+    /// Uses the normal pipeline while keeping an existing transcription untouched
+    /// until the caller explicitly promotes the completed candidate.
+    public func retranscribe(
+        course: Course,
+        segments: [RecordingSegment],
+        modelID: LocalTranscriptionModelID,
+        globalGlossary: [String] = TranscriptionGlossary.minimalMedical.globalTerms,
+        courseGlossary: [String] = [],
+        supportDocuments: [SupportDocumentExtraction] = [],
+        progress: @escaping @Sendable (LocalTranscriptionProgress) -> Void
+    ) async throws -> RetranscriptionCompletion {
+        try await performTranscription(
+            course: course,
+            segments: segments,
+            modelID: modelID,
+            globalGlossary: globalGlossary,
+            courseGlossary: courseGlossary,
+            supportDocuments: supportDocuments,
+            persistence: .stageWhenReplacing,
+            progress: progress
+        )
+    }
+
+    private func performTranscription(
+        course: Course,
+        segments: [RecordingSegment],
+        modelID: LocalTranscriptionModelID,
+        globalGlossary: [String] = TranscriptionGlossary.minimalMedical.globalTerms,
+        courseGlossary: [String] = [],
+        supportDocuments: [SupportDocumentExtraction] = [],
+        persistence: PersistenceMode,
+        progress: @escaping @Sendable (LocalTranscriptionProgress) -> Void
+    ) async throws -> RetranscriptionCompletion {
         guard LocalTranscriptionModelCatalog.descriptor(for: modelID)?.isEnabledInAlpha == true else {
             throw LocalTranscriptionError.modelDisabled(modelID)
         }
@@ -236,7 +299,20 @@ public actor LocalTranscriptionCoordinator {
                 totalSegmentCount: orderedSegments.count,
                 elapsedSeconds: result.metrics.processingDurationSeconds
             ))
-            try await store.save(stored)
+            let completion: RetranscriptionCompletion
+            switch persistence {
+            case .saveImmediately:
+                try await store.save(stored)
+                completion = .saved(stored)
+            case .stageWhenReplacing:
+                if try await store.transcription(for: course.id) == nil {
+                    try await store.save(stored)
+                    completion = .saved(stored)
+                } else {
+                    try await store.saveReplacementCandidate(stored)
+                    completion = .replacementPending(stored)
+                }
+            }
             progress(.init(
                 stage: .completed,
                 fractionCompleted: 1,
@@ -245,7 +321,7 @@ public actor LocalTranscriptionCoordinator {
                 elapsedSeconds: result.metrics.processingDurationSeconds
             ))
             await engine.unload()
-            return stored
+            return completion
         } catch {
             await engine.unload()
             throw error
@@ -254,6 +330,18 @@ public actor LocalTranscriptionCoordinator {
 
     public func saveEditedDraft(_ draft: TranscriptDraft) async throws {
         try await store.updateDraft(draft)
+    }
+
+    public func confirmReplacement(for courseID: CourseID) async throws -> StoredLocalTranscription {
+        try await store.promoteReplacementCandidate(for: courseID)
+    }
+
+    public func keepExistingTranscription(for courseID: CourseID) async throws {
+        try await store.discardReplacementCandidate(for: courseID)
+    }
+
+    public func transcription(for courseID: CourseID) async throws -> StoredLocalTranscription? {
+        try await store.transcription(for: courseID)
     }
 
     public func latestTranscription() async throws -> StoredLocalTranscription? {

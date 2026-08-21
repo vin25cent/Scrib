@@ -86,6 +86,22 @@ private struct FixedModelManager: TranscriptionModelManaging {
     }
 }
 
+private enum FakeTranscriptionFailure: Error { case failed }
+
+private actor FailingLocalEngine: TranscriptionEngine {
+    nonisolated let descriptor = TranscriptionEngineDescriptor(
+        id: "failing", displayName: "Failing", version: "1")
+
+    func transcribe(
+        _ request: LocalTranscriptionRequest,
+        progress: @escaping @Sendable (LocalTranscriptionProgress) -> Void
+    ) async throws -> LocalTranscriptionResult {
+        throw FakeTranscriptionFailure.failed
+    }
+
+    func unload() async {}
+}
+
 struct LocalTranscriptionCoordinatorTests {
     @Test func ordersSegmentsRemovesBoundaryDuplicateAndPersistsDraft() async throws {
         let course = makeCourse()
@@ -297,6 +313,127 @@ struct LocalTranscriptionCoordinatorTests {
         }
         try await Task.sleep(for: .milliseconds(30))
         #expect(await engine.unloaded())
+    }
+
+    @Test func retranscriptionKeepsOldUntilExplicitReplacementThenPromotesCandidate() async throws {
+        let course = makeCourse()
+        let segments = makeSegments(courseID: course.id)
+        let engine = FakeLocalEngine(passages: [])
+        let store = InMemoryLocalTranscriptionStore()
+        let coordinator = LocalTranscriptionCoordinator(
+            engine: engine,
+            modelManager: FixedModelManager(availability: .available),
+            store: store)
+        let old = try await coordinator.transcribe(
+            course: course, segments: segments, modelID: .smallMultilingual,
+            progress: { _ in })
+
+        let completion = try await coordinator.retranscribe(
+            course: course,
+            segments: Array(segments.reversed()),
+            modelID: .mediumMultilingual,
+            supportDocuments: [.init(
+                documentID: UUID(), sourceFileName: "support.pdf",
+                textElements: [.init(
+                    kind: .paragraph, text: "Naloxone Naloxone antidote opioïde", order: 0)])],
+            progress: { _ in })
+
+        guard case let .replacementPending(candidate) = completion else {
+            Issue.record("La retranscription devait attendre une confirmation")
+            return
+        }
+        #expect(await store.transcription(for: course.id) == old)
+        #expect(candidate.recordingSegments.map(\.sequence) == [1, 2])
+        #expect(candidate.result.courseID == course.id)
+        #expect(candidate.result.modelID == .mediumMultilingual)
+        #expect(await engine.receivedRequest()?.context?.prompt.contains("Naloxone") == true)
+        #expect(await engine.receivedRequest()?.course.id == course.id)
+
+        let promoted = try await coordinator.confirmReplacement(for: course.id)
+        #expect(promoted == candidate)
+        #expect(await store.transcription(for: course.id) == candidate)
+    }
+
+    @Test func keepingOldAfterSuccessfulRetranscriptionDiscardsOnlyCandidate() async throws {
+        let course = makeCourse()
+        let segments = [makeSegments(courseID: course.id)[0]]
+        let store = InMemoryLocalTranscriptionStore()
+        let coordinator = LocalTranscriptionCoordinator(
+            engine: FakeLocalEngine(passages: []),
+            modelManager: FixedModelManager(availability: .available),
+            store: store)
+        let old = try await coordinator.transcribe(
+            course: course, segments: segments, modelID: .smallMultilingual,
+            progress: { _ in })
+        _ = try await coordinator.retranscribe(
+            course: course, segments: segments, modelID: .mediumMultilingual,
+            progress: { _ in })
+
+        try await coordinator.keepExistingTranscription(for: course.id)
+
+        #expect(await store.transcription(for: course.id) == old)
+        #expect(await store.replacementCandidate(for: course.id) == nil)
+    }
+
+    @Test func whisperFailureDuringRetranscriptionLeavesOldTranscriptionUntouched() async throws {
+        let course = makeCourse()
+        let segments = makeSegments(courseID: course.id)
+        let store = InMemoryLocalTranscriptionStore()
+        let initial = LocalTranscriptionCoordinator(
+            engine: FakeLocalEngine(passages: []),
+            modelManager: FixedModelManager(availability: .available),
+            store: store)
+        let old = try await initial.transcribe(
+            course: course, segments: segments, modelID: .smallMultilingual,
+            progress: { _ in })
+        let failing = LocalTranscriptionCoordinator(
+            engine: FailingLocalEngine(),
+            modelManager: FixedModelManager(availability: .available),
+            store: store)
+
+        do {
+            _ = try await failing.retranscribe(
+                course: course, segments: segments, modelID: .mediumMultilingual,
+                progress: { _ in })
+            Issue.record("Une erreur moteur était attendue")
+        } catch is FakeTranscriptionFailure {
+            // Expected.
+        }
+
+        #expect(await store.transcription(for: course.id) == old)
+        #expect(await store.replacementCandidate(for: course.id) == nil)
+    }
+
+    @Test func cancellationDuringRetranscriptionLeavesOldTranscriptionUntouched() async throws {
+        let course = makeCourse()
+        let segments = makeSegments(courseID: course.id)
+        let store = InMemoryLocalTranscriptionStore()
+        let initial = LocalTranscriptionCoordinator(
+            engine: FakeLocalEngine(passages: []),
+            modelManager: FixedModelManager(availability: .available),
+            store: store)
+        let old = try await initial.transcribe(
+            course: course, segments: segments, modelID: .smallMultilingual,
+            progress: { _ in })
+        let waitingEngine = FakeLocalEngine(passages: [])
+        await waitingEngine.setShouldWait(true)
+        let coordinator = LocalTranscriptionCoordinator(
+            engine: waitingEngine,
+            modelManager: FixedModelManager(availability: .available),
+            store: store)
+        let task = Task {
+            try await coordinator.retranscribe(
+                course: course, segments: segments, modelID: .mediumMultilingual,
+                progress: { _ in })
+        }
+        await Task.yield()
+        task.cancel()
+
+        do { _ = try await task.value } catch is CancellationError {} catch {
+            Issue.record("Erreur inattendue : \(error)")
+        }
+        #expect(await store.transcription(for: course.id) == old)
+        #expect(await store.replacementCandidate(for: course.id) == nil)
     }
 
     private func makeCourse() -> Course {

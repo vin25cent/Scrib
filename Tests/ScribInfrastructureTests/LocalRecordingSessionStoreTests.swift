@@ -166,6 +166,31 @@ struct LocalRecordingSessionStoreTests {
         try Data("{}".utf8).write(to: transcriptionURL)
 
         #expect(try fixture.store.recoverableSessions().isEmpty)
+        let found = try fixture.store.recordingSession(for: fixture.course.id)
+        let reusable = try #require(found)
+        #expect(reusable.manifest.courseID == fixture.course.id)
+    }
+
+    @Test func existingCourseAudioUsesManifestOrderAndReportsMissingFiles() throws {
+        let fixture = try Fixture()
+        let manifest = try fixture.store.createSession(
+            course: fixture.course, directory: fixture.audioDirectory)
+        try fixture.addFinalizedSegment(manifest, sequence: 2)
+        try fixture.addFinalizedSegment(manifest, sequence: 1)
+        _ = try fixture.store.beginSegment(
+            sessionID: manifest.sessionID,
+            in: fixture.audioDirectory,
+            relativePath: "segment-0003.m4a",
+            sequence: 3,
+            startedAt: Date()
+        )
+
+        let found = try fixture.store.recordingSession(for: fixture.course.id)
+        let reusable = try #require(found)
+
+        #expect(reusable.recordingSegments.map(\.sequence) == [1, 2])
+        #expect(reusable.recordingSegments.allSatisfy { $0.courseID == fixture.course.id })
+        #expect(reusable.issues.contains(.missingAudioFile(relativePath: "segment-0003.m4a")))
     }
 }
 

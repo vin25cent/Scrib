@@ -24,6 +24,7 @@ final class RecordingWorkflow: ObservableObject {
     @Published private(set) var snapshot = AudioRecorderSnapshot()
     @Published private(set) var currentCourse: Course?
     @Published private(set) var capturedSegments: [RecordingSegment] = []
+    @Published private(set) var existingAudioIssues: [RecordingSessionRecoveryIssue] = []
     @Published private(set) var lastAvailableCapacity: Int64?
     @Published private(set) var lowSoundWarning = false
     @Published private(set) var processingJobs: [ProcessingJob] = []
@@ -209,6 +210,7 @@ final class RecordingWorkflow: ObservableObject {
             }
             currentCourse = recovered.manifest.course
             capturedSegments = recovered.recordingSegments
+            existingAudioIssues = recovered.issues
             snapshot = AudioRecorderSnapshot(
                 state: .finished, elapsed: capturedSegments.reduce(0) { $0 + $1.duration },
                 segments: capturedSegments,
@@ -228,10 +230,27 @@ final class RecordingWorkflow: ObservableObject {
 
     func restoreTranscriptionAudio(_ stored: StoredLocalTranscription) {
         currentCourse = stored.course
-        capturedSegments = stored.recordingSegments
+        do {
+            if let recovered = try recordingSessionStore?.recordingSession(for: stored.course.id) {
+                capturedSegments = recovered.recordingSegments
+                existingAudioIssues = recovered.issues
+            } else {
+                capturedSegments = stored.recordingSegments.sorted { $0.sequence < $1.sequence }
+                existingAudioIssues = capturedSegments.compactMap { segment in
+                    FileManager.default.fileExists(atPath: segment.fileURL.path)
+                        ? nil
+                        : .missingAudioFile(relativePath: segment.fileURL.lastPathComponent)
+                }
+            }
+        } catch {
+            capturedSegments = stored.recordingSegments.sorted { $0.sequence < $1.sequence }
+            existingAudioIssues = []
+            reportError("Les anciens enregistrements n’ont pas pu être vérifiés : \(error.localizedDescription)")
+        }
         snapshot = AudioRecorderSnapshot(
             state: .finished, elapsed: capturedSegments.reduce(0) { $0 + $1.duration },
-            segments: capturedSegments)
+            segments: capturedSegments,
+            incidentMessage: existingAudioIssues.first?.localizedDescription)
     }
 
     private func launchRecordingStart(with teacher: Teacher) {
@@ -301,6 +320,7 @@ final class RecordingWorkflow: ObservableObject {
             syncRecordingWorkflowState()
             currentCourse = course
             capturedSegments = []
+            existingAudioIssues = []
             didBeginNewRecording()
             do {
                 _ = try await processingTracker.start(course: course, activity: .recording)

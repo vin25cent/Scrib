@@ -3,6 +3,7 @@ import ScribDomain
 
 public actor InMemoryLocalTranscriptionStore: LocalTranscriptionStoring {
     private var value: StoredLocalTranscription?
+    private var candidate: StoredLocalTranscription?
 
     public init() {}
 
@@ -10,10 +11,37 @@ public actor InMemoryLocalTranscriptionStore: LocalTranscriptionStoring {
         value = transcription
     }
 
+    public func saveReplacementCandidate(_ transcription: StoredLocalTranscription) {
+        candidate = transcription
+    }
+
+    public func replacementCandidate(for courseID: CourseID) -> StoredLocalTranscription? {
+        candidate?.course.id == courseID ? candidate : nil
+    }
+
+    public func promoteReplacementCandidate(
+        for courseID: CourseID
+    ) throws -> StoredLocalTranscription {
+        guard let candidate, candidate.course.id == courseID else {
+            throw LocalTranscriptionError.noPendingReplacement
+        }
+        value = candidate
+        self.candidate = nil
+        return candidate
+    }
+
+    public func discardReplacementCandidate(for courseID: CourseID) {
+        if candidate?.course.id == courseID { candidate = nil }
+    }
+
     public func updateDraft(_ draft: TranscriptDraft) throws {
         guard var value else { throw LocalTranscriptionError.inconsistentCourse }
         value.draft = draft
         self.value = value
+    }
+
+    public func transcription(for courseID: CourseID) -> StoredLocalTranscription? {
+        value?.course.id == courseID ? value : nil
     }
 
     public func latest() -> StoredLocalTranscription? { value }
