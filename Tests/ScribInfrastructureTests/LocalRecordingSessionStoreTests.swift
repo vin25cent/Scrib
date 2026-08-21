@@ -54,7 +54,10 @@ struct LocalRecordingSessionStoreTests {
         #expect(restored.manifest.segments.count == 1)
         #expect(restored.manifest.segments[0].relativePath == "segment-0001.m4a")
         #expect(restored.manifest.segments[0].state == .finalized)
-        #expect(restored.recordingSegments[0].fileURL == audioURL)
+        #expect(
+            restored.recordingSegments[0].fileURL.resolvingSymlinksInPath()
+                == audioURL.resolvingSymlinksInPath()
+        )
     }
 
     @Test func segmentsRemainOrderedAcrossPausesAndResumes() throws {

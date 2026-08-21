@@ -23,7 +23,7 @@ payants sont désactivés par défaut.
 - [Barrière locale de confidentialité](docs/PRIVACY_GATE.md)
 - [Génération IA](docs/AI_GENERATION.md)
 - [Installer l’alpha sur macOS](docs/INSTALLATION_ALPHA_MACOS.md)
-- [Notes de version 0.1.0-alpha.9](docs/RELEASE_NOTES_0.1.0_ALPHA.9.md)
+- [Notes de version 0.1.0-alpha.10](docs/RELEASE_NOTES_0.1.0_ALPHA.10.md)
 
 ## Structure
 
