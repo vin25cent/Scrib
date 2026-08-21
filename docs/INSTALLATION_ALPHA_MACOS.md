@@ -1,4 +1,4 @@
-# Installer Scrib 0.1.0-alpha.14 sur macOS
+# Installer Scrib 0.1.0-alpha.15 sur macOS
 
 Cette alpha cible un Mac Apple Silicon sous macOS 14 ou plus récent. Pour
 l’utiliser, le Mac n’a besoin ni de Xcode, ni de Swift, ni de Homebrew, ni de
@@ -6,8 +6,8 @@ Python, ni de Terminal.
 
 ## Télécharger
 
-1. Ouvrir la page [Scrib 0.1.0-alpha.14](https://github.com/vin25cent/Scrib/releases/tag/v0.1.0-alpha.14).
-2. Dans **Assets**, télécharger `Scrib-0.1.0-alpha.14-macOS.zip`.
+1. Ouvrir la page [Scrib 0.1.0-alpha.15](https://github.com/vin25cent/Scrib/releases/tag/v0.1.0-alpha.15).
+2. Dans **Assets**, télécharger `Scrib-0.1.0-alpha.15-macOS.zip`.
 3. Le fichier `.sha256` joint permet un contrôle d’intégrité facultatif.
 
 ## Installer et ouvrir sans Terminal
@@ -34,7 +34,7 @@ cloud restent séparés et désactivés par défaut.
 ## Premier essai de transcription réelle
 
 1. Ouvrir **Transcription locale**.
-2. Sélectionner **Tiny multilingue** puis cliquer **Télécharger**. Une connexion
+2. Sélectionner **Small multilingue** puis cliquer **Télécharger**. Une connexion
    Internet est nécessaire pour ce téléchargement volontaire uniquement.
 3. Attendre l’état **Modèle disponible hors ligne**.
 4. Ouvrir **Nouveau cours**, remplir les informations puis démarrer.
@@ -43,12 +43,16 @@ cloud restent séparés et désactivés par défaut.
 7. Cliquer **Transcrire localement** et observer la progression.
 8. À la fin, vérifier le facteur temps réel puis ouvrir le résultat dans l’éditeur.
 9. Fermer Scrib, le rouvrir et vérifier que la transcription est toujours présente.
-10. Refaire ensuite le test avec 10 à 30 minutes, puis avec Small multilingue.
+10. Rouvrir le même cours et cliquer **Retranscrire l’audio** pour vérifier que
+    les fichiers existants sont réutilisés sans nouvel enregistrement.
+11. Confirmer que l’ancienne transcription reste visible jusqu’au choix
+    **Remplacer l’ancienne transcription** ou **Conserver l’ancienne**.
+12. Refaire ensuite le test avec 10 à 30 minutes, puis avec Medium multilingue.
 
 ## Modèles
 
-- **Tiny multilingue**, environ 76,6 Mo : tests techniques et diagnostic rapide.
-- **Small multilingue**, environ 486 Mo : premiers essais de qualité en français.
+- **Small multilingue**, environ 486 Mo : modèle recommandé par défaut.
+- **Medium multilingue** : candidat qualité à comparer sur le même audio.
 
 Les tailles peuvent évoluer légèrement dans le dépôt de modèles. Scrib affiche
 la taille réellement installée. Un modèle déjà disponible n’est pas téléchargé
