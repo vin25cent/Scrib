@@ -214,6 +214,10 @@ import UniformTypeIdentifiers
         guard let job = selectedProcessingJob else { return }
         activateTrackedCourse(job, navigateToTranscription: true)
     }
+    func openSelectedCourseFolder() {
+        guard let courseID = selectedProcessingJob?.courseID else { return }
+        openCourseFolder(for: courseID)
+    }
     func finalizeForTermination() throws { try recording.finalizeForTermination() }
 
     var transcriptDraft: TranscriptDraft? {
@@ -311,6 +315,22 @@ import UniformTypeIdentifiers
     func cancelLocalTranscription() { transcription.cancel(courseID: currentCourse?.id) }
     func openRawTranscriptInEditor() {
         if transcription.openRawTranscript() { selectedSection = .transcript }
+    }
+
+    private func openCourseFolder(for courseID: CourseID) {
+        do {
+            let directory = try recording.courseDirectory(for: courseID)
+            guard directory.isFileURL,
+                  FileManager.default.fileExists(atPath: directory.path) else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            guard NSWorkspace.shared.open(directory) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+        } catch {
+            NSLog("Scrib: unable to open course folder for %@: %@", courseID.rawValue.uuidString, error.localizedDescription)
+            errorMessage = "Impossible d’ouvrir le dossier local de ce cours."
+        }
     }
 
     private func activateTrackedCourse(

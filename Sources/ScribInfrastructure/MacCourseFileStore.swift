@@ -16,11 +16,26 @@ public final class MacCourseFileStore: CourseFileStoring {
         ).first!
     }
 
-    public func recordingDirectory(for course: Course) throws -> URL {
+    init(applicationSupportDirectory: URL, fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        self.applicationSupportDirectory = applicationSupportDirectory
+    }
+
+    public func courseDirectory(for courseID: CourseID) throws -> URL {
         let directory = applicationSupportDirectory
             .appendingPathComponent("Scrib", isDirectory: true)
             .appendingPathComponent("Courses", isDirectory: true)
-            .appendingPathComponent(course.id.rawValue.uuidString, isDirectory: true)
+            .appendingPathComponent(courseID.rawValue.uuidString, isDirectory: true)
+
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        return directory
+    }
+
+    public func recordingDirectory(for course: Course) throws -> URL {
+        let directory = try courseDirectory(for: course.id)
             .appendingPathComponent("audio", isDirectory: true)
 
         try fileManager.createDirectory(

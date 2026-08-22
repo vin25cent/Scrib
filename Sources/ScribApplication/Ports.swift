@@ -42,6 +42,9 @@ public protocol RecordingSessionStoring: AnyObject {
 
 @MainActor
 public protocol CourseFileStoring: AnyObject {
+    /// Resolves the root directory that contains every local artifact for a course.
+    /// Implementations create this directory when their storage policy requires it.
+    func courseDirectory(for courseID: CourseID) throws -> URL
     func recordingDirectory(for course: Course) throws -> URL
     func availableCapacity(for directory: URL) throws -> Int64
 }

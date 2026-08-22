@@ -562,7 +562,8 @@ private struct ProcessingTrackingView: View {
             CourseTrackingDetail(
                 job: job,
                 refresh: { Task { await model.reloadProcessingTracking() } },
-                openInTranscription: model.openSelectedCourseInLocalTranscription)
+                openInTranscription: model.openSelectedCourseInLocalTranscription,
+                openCourseFolder: model.openSelectedCourseFolder)
         } else {
             PlaceholderView(
                 title: "Sélectionnez un cours",
@@ -637,6 +638,7 @@ private struct CourseTrackingDetail: View {
     let job: ProcessingJob
     let refresh: () -> Void
     let openInTranscription: () -> Void
+    let openCourseFolder: () -> Void
 
     var body: some View {
         ScrollView {
@@ -669,6 +671,10 @@ private struct CourseTrackingDetail: View {
                     statusBadge
                     Button("Ouvrir dans Transcription locale", action: openInTranscription)
                         .buttonStyle(.borderedProminent)
+                    Button(action: openCourseFolder) {
+                        Label("Ouvrir le dossier dans Finder", systemImage: "folder")
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
             HStack(spacing: 18) {

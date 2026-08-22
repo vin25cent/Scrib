@@ -257,6 +257,10 @@ final class RecordingWorkflow: ObservableObject {
         try recordingSessionStore?.recordingSession(for: courseID)
     }
 
+    func courseDirectory(for courseID: CourseID) throws -> URL {
+        try fileStore.courseDirectory(for: courseID)
+    }
+
     func activate(_ workspace: ActiveCourseWorkspace) {
         currentCourse = workspace.course
         capturedSegments = workspace.recordingSegments

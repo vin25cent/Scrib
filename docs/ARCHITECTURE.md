@@ -123,6 +123,12 @@ ne sont jamais placés dans SwiftData.
 └── AI/                             historique de génération, non raccordé à l’UI
 ```
 
+Le dossier racine d’un cours est résolu par `MacCourseFileStore` à partir de
+`FileManager` : l’application ne suppose donc pas le chemin absolu choisi par
+macOS (notamment dans un conteneur App Sandbox). Il contient les audios,
+manifestes et transcriptions de ce `CourseID`; l’action « Ouvrir le dossier dans
+Finder » ouvre directement cette racine.
+
 Chaque adaptateur possède sa propre persistance locale : manifestes de session,
 transcriptions et suivi SwiftData. Il n'existe pas de source de vérité globale,
 ni de publication iCloud des DOCX dans l'alpha actuel.
